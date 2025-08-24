@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+/* Custom styles for better appearance */
+:root {
+  --color-primary: #3b82f6;
+  --color-secondary: #64748b;
+}
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+/* Fix modal backdrop */
+.fixed.inset-0 {
+  z-index: 40;
+}
+
+/* Fix modal content */
+.fixed.inset-0 + div {
+  z-index: 50;
+}
+
+/* Ensure proper spacing */
+.container {
+  max-width: 1280px;
+}
