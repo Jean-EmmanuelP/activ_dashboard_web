@@ -47,6 +47,7 @@ export type Question = {
 	order_index: number;
 	is_required: boolean;
 	notes?: string;
+	range?: any;
 	created_at?: string;
 	updated_at?: string;
 	children?: Question[];

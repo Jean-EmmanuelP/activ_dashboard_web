@@ -2,8 +2,6 @@
 	import { supabase } from '$lib/supabase';
 	import type { Submission } from '$lib/supabase';
 	import { onMount } from 'svelte';
-	import { Button, Card, Input, Label, Table, TableBody, TableBodyCell, TableBodyRow, TableHead, TableHeadCell, Badge, Alert } from 'flowbite-svelte';
-	import { SearchOutline } from 'flowbite-svelte-icons';
 	import { goto } from '$app/navigation';
 
 	let searchKey = $state('');
@@ -12,15 +10,14 @@
 	let loading = $state(false);
 	let error = $state('');
 	let loadingSubmissions = $state(true);
+	
 	onMount(async () => {
 		await loadRecentSubmissions();
 	});
 
-
 	async function loadRecentSubmissions() {
 		loadingSubmissions = true;
 		try {
-			// Load the 10 most recent submissions
 			const { data, error: err } = await supabase
 				.from('submissions')
 				.select('*')
@@ -52,8 +49,6 @@
 		error = '';
 
 		try {
-			// Search for submissions where secure_key starts with or ends with the search value
-			// Using case-insensitive search with ilike
 			const { data: allSubmissions, error: subError } = await supabase
 				.from('submissions')
 				.select('*')
@@ -61,23 +56,18 @@
 
 			if (subError) throw subError;
 
-			// Filter to find best matches
 			let matchedSubmissions = allSubmissions || [];
 			
-			// Sort by relevance: exact matches first, then starts with, then ends with
 			matchedSubmissions.sort((a, b) => {
 				const aKey = a.secure_key.toLowerCase();
 				const bKey = b.secure_key.toLowerCase();
 				
-				// Exact match gets highest priority
 				if (aKey === searchValue) return -1;
 				if (bKey === searchValue) return 1;
 				
-				// Starts with gets second priority
 				if (aKey.startsWith(searchValue) && !bKey.startsWith(searchValue)) return -1;
 				if (!aKey.startsWith(searchValue) && bKey.startsWith(searchValue)) return 1;
 				
-				// Default order
 				return 0;
 			});
 
@@ -85,7 +75,6 @@
 				throw new Error(`Aucune submission trouvée avec "${searchValue}" au début ou à la fin de la clé`);
 			}
 
-			// Select the best match (first one after sorting)
 			const submission = matchedSubmissions[0];
 
 			const { data: answersData } = await supabase
@@ -95,16 +84,13 @@
 				.order('question_id');
 
 			selectedSubmission = submission;
-			answers = answersData || [];
 			
-			// Add to list if not already present
 			if (!submissionsList.find(s => s.id === submission.id)) {
 				submissionsList = [submission, ...submissionsList];
 			}
 
 			searchKey = '';
 			
-			// Show info about multiple matches
 			if (matchedSubmissions.length > 1) {
 				const matchInfo = matchedSubmissions.slice(0, 3).map(s => {
 					const key = s.secure_key;
@@ -113,7 +99,6 @@
 				
 				error = `${matchedSubmissions.length} correspondances trouvées (${matchInfo}${matchedSubmissions.length > 3 ? ', ...' : ''}). Affichage de la meilleure correspondance.`;
 			} else {
-				// Show success with the found key
 				const key = submission.secure_key;
 				error = `✓ Submission trouvée: ${key.slice(0, 8)}...${key.slice(-8)}`;
 			}
@@ -125,124 +110,134 @@
 	}
 
 	async function selectSubmission(submission: Submission) {
-		// Navigate to the submission detail page
 		goto(`/dashboard/submission/${submission.id}`);
 	}
 
-
-
 	function getStatusColor(status: string) {
 		switch(status) {
-			case 'submitted': return 'green';
-			case 'draft': return 'yellow';
-			default: return 'dark';
+			case 'submitted': return 'badge-success';
+			case 'draft': return 'badge-warning';
+			default: return 'badge-primary';
 		}
 	}
-
 </script>
 
-<div class="container mx-auto p-6">
-	<h1 class="mb-6 text-3xl font-bold text-gray-800">Rechercher le questionnaire d'un patient</h1>
+<div class="container mx-auto p-8">
+	<h1 class="mb-8 lato-black" style="color: var(--color-gray-900);">
+		Rechercher le questionnaire d'un patient
+	</h1>
 
-	<Card class="mb-6 shadow-lg">
-		<div class="mb-2">
-			<p class="text-sm text-gray-600">💡 Demandez au patient les 2-5 premiers ou derniers caractères de sa clé sécurisée</p>
+	<div class="card mb-8">
+		<div class="mb-4">
+			<p class="lato-regular text-sm" style="color: var(--color-gray-600);">
+				💡 Demandez au patient les 2-5 premiers ou derniers caractères de sa clé sécurisée
+			</p>
 		</div>
 		<form onsubmit={(e) => { e.preventDefault(); searchSubmission(); }} class="flex gap-4">
 			<div class="flex-1">
 				<div class="relative">
-					<SearchOutline class="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-					<Input
+					<svg class="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5" style="color: var(--color-gray-400);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+					</svg>
+					<input
 						placeholder="Ex: c5df (début) ou 0154 (fin) - Min. 2 caractères"
 						bind:value={searchKey}
 						disabled={loading}
-						size="lg"
-						class="w-full pl-10"
+						class="form-input pl-12"
+						style="width: 100%;"
 					/>
 				</div>
 			</div>
-			<Button type="submit" disabled={loading || !searchKey.trim()} size="lg" color="blue">
+			<button type="submit" disabled={loading || !searchKey.trim()} class="btn btn-primary">
 				{#if loading}
-					<svg class="animate-spin h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24">
-						<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-						<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-					</svg>
+					<div class="spinner" style="width: 20px; height: 20px;"></div>
 					Recherche...
 				{:else}
 					Rechercher
 				{/if}
-			</Button>
+			</button>
 		</form>
 
 		{#if error}
-			<Alert color={error.startsWith('✓') ? 'green' : error.includes('correspondances trouvées') ? 'yellow' : 'red'} class="mt-4">
+			<div class="alert {error.startsWith('✓') ? 'alert-success' : error.includes('correspondances trouvées') ? 'alert-warning' : 'alert-error'} mt-4">
 				{error}
-			</Alert>
-		{/if}
-	</Card>
-
-	<Card class="shadow-lg">
-		<div class="mb-4 flex flex-col items-center justify-between border-b pb-4">
-			<div class="flex flex-col items-center justify-center py-4">
-				<h2 class="text-xl font-semibold text-gray-800">Submissions récentes</h2>
-				<p class="text-sm text-gray-600">Les 10 dernières submissions créées</p>
 			</div>
+		{/if}
+	</div>
+
+	<div class="card">
+		<div class="mb-6 text-center">
+			<h2 class="lato-bold text-xl" style="color: var(--color-gray-800);">
+				Submissions récentes
+			</h2>
+			<p class="lato-regular text-sm mt-1" style="color: var(--color-gray-600);">
+				Les 10 dernières submissions créées
+			</p>
 		</div>
 
-		<Table hoverable={true} class="w-full">
-			<TableHead class="bg-gray-50">
-				<TableHeadCell class="font-semibold">Statut</TableHeadCell>
-				<TableHeadCell class="font-semibold">ID</TableHeadCell>
-				<TableHeadCell class="font-semibold">Date de mise à jour</TableHeadCell>
-				<TableHeadCell class="font-semibold">Soumissions</TableHeadCell>
-				<TableHeadCell class="font-semibold">Actions</TableHeadCell>
-			</TableHead>
-			<TableBody>
-				{#if loadingSubmissions}
-					<TableBodyRow>
-						<TableBodyCell colspan="5" class="text-center py-8">
-							<div class="flex justify-center">
-								<svg class="animate-spin h-8 w-8 text-blue-500" fill="none" viewBox="0 0 24 24">
-									<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-									<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-								</svg>
-							</div>
-							<p class="mt-2 text-gray-500">Chargement des submissions...</p>
-						</TableBodyCell>
-					</TableBodyRow>
-				{:else}
-					{#each submissionsList as submission}
-					<TableBodyRow class="hover:bg-blue-50 transition-colors">
-						<TableBodyCell>
-							<Badge color={getStatusColor(submission.status)}>
-								{submission.status}
-							</Badge>
-						</TableBodyCell>
-						<TableBodyCell class="font-mono text-xs">
-							{submission.secure_key.slice(0, 8)}...
-						</TableBodyCell>
-						<TableBodyCell>
-							{new Date(submission.updated_at || '').toLocaleDateString('fr-FR')}
-						</TableBodyCell>
-						<TableBodyCell>
-							{submission.submission_count}
-						</TableBodyCell>
-						<TableBodyCell>
-							<Button size="xs" color="primary" onclick={() => selectSubmission(submission)} class="hover:shadow-md transition-shadow">
-								Voir plus
-							</Button>
-						</TableBodyCell>
-					</TableBodyRow>
-					{/each}
-				{/if}
-				{#if !loadingSubmissions && submissionsList.length === 0}
-					<TableBodyRow>
-						<TableBodyCell colspan="5" class="text-center text-gray-500">
-							Aucune submission trouvée
-						</TableBodyCell>
-					</TableBodyRow>
-				{/if}
-			</TableBody>
-		</Table>
-	</Card>
+		<div class="overflow-x-auto">
+			<table class="table">
+				<thead>
+					<tr>
+						<th>Statut</th>
+						<th>ID</th>
+						<th>Date de mise à jour</th>
+						<th>Soumissions</th>
+						<th>Actions</th>
+					</tr>
+				</thead>
+				<tbody>
+					{#if loadingSubmissions}
+						<tr>
+							<td colspan="5" class="text-center py-8">
+								<div class="flex justify-center">
+									<div class="spinner"></div>
+								</div>
+								<p class="mt-3 lato-regular" style="color: var(--color-gray-500);">
+									Chargement des submissions...
+								</p>
+							</td>
+						</tr>
+					{:else}
+						{#each submissionsList as submission}
+						<tr>
+							<td>
+								<span class="badge {getStatusColor(submission.status)}">
+									{submission.status}
+								</span>
+							</td>
+							<td>
+								<span class="lato-regular" style="font-family: monospace; font-size: 0.875rem; color: var(--color-gray-600);">
+									{submission.secure_key.slice(0, 8)}...
+								</span>
+							</td>
+							<td>
+								<span class="lato-regular" style="color: var(--color-gray-600);">
+									{new Date(submission.updated_at || '').toLocaleDateString('fr-FR')}
+								</span>
+							</td>
+							<td>
+								<span class="lato-regular" style="color: var(--color-gray-700);">
+									{submission.submission_count}
+								</span>
+							</td>
+							<td>
+								<button onclick={() => selectSubmission(submission)} class="btn btn-sm btn-primary">
+									Voir plus
+								</button>
+							</td>
+						</tr>
+						{/each}
+					{/if}
+					{#if !loadingSubmissions && submissionsList.length === 0}
+						<tr>
+							<td colspan="5" class="text-center" style="color: var(--color-gray-500);">
+								Aucune submission trouvée
+							</td>
+						</tr>
+					{/if}
+				</tbody>
+			</table>
+		</div>
+	</div>
 </div>
