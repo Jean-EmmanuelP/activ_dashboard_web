@@ -4,10 +4,13 @@
 	import type { Submission, Answer, Question, Section } from '$lib/supabase';
 	import { onMount } from 'svelte';
 	import QuestionItem from '$lib/components/QuestionItem.svelte';
+	import QuestionnaireForm from '$lib/components/QuestionnaireForm.svelte';
 	import PrescriptionMedicale from '$lib/components/PrescriptionMedicale.svelte';
 	import PageConseilsAPA from '$lib/components/PageConseilsAPA.svelte';
 	import { goto } from '$app/navigation';
-	import { generateRecommendations, type AIRecommendation } from '$lib/services/vertexAI';
+	import { AIService } from '$lib/services/aiService';
+	import type { AIRecommendationResponse } from '$lib/types/ai';
+	import { auth } from '$lib/stores/auth';
 	
 	let submission = $state<Submission | null>(null);
 	let sections = $state<Section[]>([]);
@@ -20,7 +23,7 @@
 	let showToast = $state(false);
 	let toastMessage = $state('');
 	let generatingAI = $state(false);
-	let aiResponseData = $state<AIRecommendation | null>(null);
+	let aiResponseData = $state<AIRecommendationResponse | null>(null);
 	let currentView = $state<'questionnaire' | 'prescription' | 'conseils'>('questionnaire');
 	
 	let localAnswers = new Map<number, string>();
@@ -271,102 +274,77 @@
 					
 					generatingAI = true;
 					try {
-						// Simulation de délai pour l'effet de génération
-						await new Promise(resolve => setTimeout(resolve, 2000));
+						// Récupérer les informations du médecin depuis Supabase
+						const { data: userData } = await supabase
+							.from('users')
+							.select('*')
+							.eq('email', authUser.email)
+							.single();
+							
+						const doctorInfo = userData ? {
+							nom: userData.last_name || '',
+							prenom: userData.first_name || '',
+							email: userData.email,
+							signature: userData.signature
+						} : undefined;
+
+						// Appeler l'API pour générer les recommandations
+						aiResponseData = await AIService.generateRecommendations(
+							submission,
+							answers,
+							questions,
+							doctorInfo
+						);
 						
-						// Données en dur pour la démo
-						aiResponseData = {
-							conseils: [
-								"💪 Commencer par 30 minutes de marche rapide 3 fois par semaine, en augmentant progressivement à 5 fois par semaine",
-								"🏊 Privilégier la natation 2 fois par semaine pour renforcer les muscles sans impact sur les articulations",
-								"🧘 Intégrer 15 minutes d'étirements quotidiens le matin pour améliorer la souplesse et réduire les tensions",
-								"🥗 Maintenir une alimentation équilibrée riche en protéines pour soutenir le développement musculaire",
-								"💧 Boire au minimum 2 litres d'eau par jour, augmenter à 3 litres les jours d'activité physique",
-								"😴 Respecter 7-8 heures de sommeil par nuit pour optimiser la récupération musculaire",
-								"📊 Tenir un journal d'activité physique pour suivre les progrès et ajuster l'intensité",
-								"🚶 Utiliser les escaliers plutôt que l'ascenseur pour augmenter l'activité quotidienne",
-								"⏰ Établir une routine fixe d'exercice pour créer une habitude durable",
-								"👥 Rejoindre un groupe de sport adapté pour maintenir la motivation et le lien social"
-							],
-							objectifs: [
-								"Améliorer l'endurance cardiovasculaire de 20% en 3 mois",
-								"Renforcer la masse musculaire, particulièrement au niveau du tronc et des jambes",
-								"Réduire les douleurs lombaires par le renforcement de la ceinture abdominale",
-								"Atteindre 150 minutes d'activité physique modérée par semaine selon les recommandations OMS",
-								"Améliorer la qualité de vie et l'autonomie dans les activités quotidiennes"
-							],
-							benefices: [
-								"Réduction du risque cardiovasculaire de 30-40%",
-								"Amélioration de la densité osseuse et prévention de l'ostéoporose",
-								"Diminution du stress et amélioration de l'humeur grâce aux endorphines",
-								"Meilleur contrôle du poids et de la composition corporelle",
-								"Amélioration de la qualité du sommeil et de l'énergie quotidienne",
-								"Renforcement du système immunitaire",
-								"Prévention du diabète de type 2 et amélioration de la sensibilité à l'insuline"
-							],
-							programme_perso: {
-								endurance: "Marche rapide : 30 min x 3/semaine en semaine 1-2, puis augmenter à 45 min x 4/semaine. Natation : 2 séances de 30 min/semaine. Vélo d'appartement : 20 min à intensité modérée 2 fois/semaine.",
-								renforcement: "Circuit training 2x/semaine : squats (3x12), pompes murales (3x10), gainage (3x30sec), levées de jambes (3x10). Utiliser des bandes élastiques pour progresser. Séances de 30-40 minutes.",
-								etirements: "Routine quotidienne de 15 min : étirements des ischio-jambiers, quadriceps, mollets, dos et épaules. Yoga doux 1x/semaine. Insister sur la respiration profonde pendant les étirements.",
-								equilibre: "Exercices sur une jambe : 3x30 sec par jambe. Marche talon-pointe sur ligne droite. Tai-chi ou yoga 1x/semaine pour améliorer la proprioception."
-							},
-							planification: `
-LUNDI : Marche rapide 30-45 min + Étirements 15 min
-MARDI : Natation 30 min + Renforcement musculaire 30 min
-MERCREDI : Repos actif (marche légère 20 min) + Étirements 15 min
-JEUDI : Circuit training 40 min + Étirements 15 min
-VENDREDI : Marche rapide 30-45 min ou Vélo 20 min
-SAMEDI : Natation 30 min + Yoga/Tai-chi 45 min
-DIMANCHE : Repos ou activité légère de loisir (jardinage, promenade)
-							`,
-							orientation: [
-								"Consultation avec un kinésithérapeute pour évaluation posturale complète",
-								"Rendez-vous avec un éducateur APA certifié pour personnalisation du programme",
-								"Suivi médical trimestriel pour ajuster la prescription selon l'évolution",
-								"Inscription recommandée dans une association sport-santé locale",
-								"Bilan podologique si douleurs aux genoux ou hanches persistent"
-							],
-							contraindications: [
-								"Éviter les exercices à impact élevé (course, sauts)",
-								"Ne pas dépasser 70% de la fréquence cardiaque maximale",
-								"Arrêter immédiatement en cas de douleur thoracique ou essoufflement anormal"
-							],
-							follow_up: {
-								next_assessment: "3 mois",
-								monitoring_points: [
-									"Fréquence cardiaque de repos",
-									"Tension artérielle",
-									"Périmètre de marche",
-									"Force musculaire",
-									"Souplesse articulaire"
-								],
-								professional_referrals: [
-									"Kinésithérapeute",
-									"Éducateur APA",
-									"Nutritionniste si besoin"
-								]
-							},
-							disclaimer: "🩺 Ces conseils ne remplacent pas un avis médical. Ils doivent être validés par un professionnel de santé avant application. En cas de symptômes inhabituels, consultez immédiatement votre médecin."
-						};
+						console.log('🔍 aiResponseData reçue:', aiResponseData);
 						
-						const { error: aiError } = await supabase
+						if (!aiResponseData) {
+							throw new Error('Aucune donnée reçue de l\'API');
+						}
+						
+						// Stocker la réponse dans la base de données
+						console.log('💾 Sauvegarde dans llm_responses...');
+						console.log('📋 Données à sauvegarder:', {
+							submission_id: submission.id,
+							response_content: aiResponseData,
+							rag_used: null
+						});
+						
+						const { data: insertData, error: llmError } = await supabase
 							.from('llm_responses')
 							.insert({
 								submission_id: submission.id,
 								response_content: aiResponseData,
+								rag_used: null,
 								generated_at: new Date().toISOString()
-							});
+							})
+							.select();
 						
-						if (aiError) {
-							console.error('Error saving AI response:', aiError);
+						console.log('📊 Résultat insert:', { data: insertData, error: llmError });
+						
+						if (llmError) {
+							console.error('❌ Erreur lors de la sauvegarde de la réponse IA:', llmError);
+						} else {
+							console.log('✅ Réponse IA sauvegardée avec succès:', insertData);
 						}
 						
-						// Switch to prescription view after generation
-						goto(`/dashboard/submission/${submission.id}?view=prescription`);
-					} catch (aiErr) {
-						console.error('Error generating AI recommendations:', aiErr);
-						aiResponseData = null;
-					} finally {
+						showSuccessToast('Recommandations IA générées avec succès !');
+						
+						// Afficher un message de redirection
+						setTimeout(() => {
+							showSuccessToast('Redirection vers la prescription...');
+						}, 1000);
+						
+						// Rediriger automatiquement vers la prescription
+						console.log('🚀 Redirection vers la prescription...');
+						setTimeout(() => {
+							generatingAI = false;
+							console.log('🚀 Redirection effective vers la prescription');
+							goto(`/dashboard/submission/${submission.id}?view=prescription`);
+						}, 2000);
+					} catch (err) {
+						console.error('Erreur lors de la génération IA:', err);
+						error = err instanceof Error ? err.message : 'Erreur lors de la génération des recommandations';
 						generatingAI = false;
 					}
 				}
@@ -378,7 +356,7 @@ DIMANCHE : Repos ou activité légère de loisir (jardinage, promenade)
 		}
 	}
 	
-	function handleAIUpdate(updatedResponse: AIRecommendation) {
+	function handleAIUpdate(updatedResponse: AIRecommendationResponse) {
 		aiResponseData = updatedResponse;
 	}
 	
@@ -389,6 +367,16 @@ DIMANCHE : Repos ou activité légère de loisir (jardinage, promenade)
 			default: return '#6b7280';
 		}
 	}
+	
+	function navigateToView(view: 'questionnaire' | 'prescription' | 'conseils') {
+		if (!submission) return;
+		
+		if (view === 'questionnaire') {
+			goto(`/dashboard/submission/${submission.id}`);
+		} else {
+			goto(`/dashboard/submission/${submission.id}?view=${view}`);
+		}
+	}
 </script>
 
 <style>
@@ -396,167 +384,6 @@ DIMANCHE : Repos ou activité légère de loisir (jardinage, promenade)
 	
 	:global(body) {
 		font-family: "Lato", sans-serif;
-	}
-	
-	.full-screen {
-		min-height: 100vh;
-		background: linear-gradient(135deg, #f5f7fa 0%, #e9ecef 100%);
-		padding-top: 1rem;
-	}
-	
-	
-	
-	.content-area {
-		padding: 2rem;
-		max-width: 1400px;
-		margin: 0 auto;
-	}
-	
-	.questionnaire-container {
-		background: white;
-		border-radius: 1rem;
-		box-shadow: 0 10px 40px rgba(0, 0, 0, 0.05);
-		padding: 2rem;
-		margin-bottom: 2rem;
-	}
-	
-	.section-card {
-		background: white;
-		border: 2px solid #e5e7eb;
-		border-radius: 0.75rem;
-		padding: 1.5rem;
-		margin-bottom: 1.5rem;
-		transition: all 0.3s ease;
-	}
-	
-	.section-card:hover {
-		border-color: #003087;
-		box-shadow: 0 4px 20px rgba(0, 48, 135, 0.1);
-	}
-	
-	.section-title {
-		font-size: 1.25rem;
-		font-weight: 700;
-		color: #003087;
-		margin-bottom: 0.5rem;
-	}
-	
-	.btn-primary {
-		background: linear-gradient(135deg, #003087 0%, #012169 100%);
-		color: white;
-		border: none;
-		padding: 0.75rem 1.5rem;
-		border-radius: 0.5rem;
-		font-weight: 600;
-		cursor: pointer;
-		transition: all 0.3s ease;
-		box-shadow: 0 4px 15px rgba(0, 48, 135, 0.2);
-	}
-	
-	.btn-primary:hover {
-		transform: translateY(-2px);
-		box-shadow: 0 6px 20px rgba(0, 48, 135, 0.3);
-	}
-	
-	.btn-secondary {
-		background: white;
-		color: #003087;
-		border: 2px solid #003087;
-		padding: 0.75rem 1.5rem;
-		border-radius: 0.5rem;
-		font-weight: 600;
-		cursor: pointer;
-		transition: all 0.3s ease;
-	}
-	
-	.btn-secondary:hover {
-		background: #003087;
-		color: white;
-	}
-	
-	.btn-ghost {
-		background: transparent;
-		color: #6b7280;
-		border: 2px solid #e5e7eb;
-		padding: 0.75rem 1.5rem;
-		border-radius: 0.5rem;
-		font-weight: 600;
-		cursor: pointer;
-		transition: all 0.3s ease;
-	}
-	
-	.btn-ghost:hover {
-		border-color: #9ca3af;
-		background: #f9fafb;
-	}
-	
-	.loading-spinner {
-		display: inline-block;
-		width: 50px;
-		height: 50px;
-		border: 3px solid rgba(0, 48, 135, 0.1);
-		border-radius: 50%;
-		border-top-color: #003087;
-		animation: spin 1s ease-in-out infinite;
-	}
-	
-	@keyframes spin {
-		to { transform: rotate(360deg); }
-	}
-	
-	.alert {
-		padding: 1rem;
-		border-radius: 0.5rem;
-		margin-bottom: 1rem;
-		font-weight: 500;
-	}
-	
-	.alert-success {
-		background: #dcfce7;
-		color: #166534;
-		border: 1px solid #86efac;
-	}
-	
-	.alert-error {
-		background: #fee2e2;
-		color: #991b1b;
-		border: 1px solid #fca5a5;
-	}
-	
-	.toast {
-		position: fixed;
-		top: 2rem;
-		right: 2rem;
-		background: white;
-		padding: 1rem 1.5rem;
-		border-radius: 0.75rem;
-		box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
-		display: flex;
-		align-items: center;
-		gap: 0.75rem;
-		min-width: 300px;
-		max-width: 400px;
-		z-index: 1000;
-		animation: slideIn 0.3s ease-out;
-		border-left: 4px solid #22c55e;
-	}
-	
-	.toast-icon {
-		width: 24px;
-		height: 24px;
-		background: #22c55e;
-		border-radius: 50%;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		color: white;
-		flex-shrink: 0;
-	}
-	
-	.toast-message {
-		flex: 1;
-		color: #1f2937;
-		font-weight: 500;
 	}
 	
 	@keyframes slideIn {
@@ -570,10 +397,6 @@ DIMANCHE : Repos ou activité légère de loisir (jardinage, promenade)
 		}
 	}
 	
-	.toast.fade-out {
-		animation: fadeOut 0.3s ease-out forwards;
-	}
-	
 	@keyframes fadeOut {
 		to {
 			transform: translateX(100%);
@@ -584,138 +407,61 @@ DIMANCHE : Repos ou activité légère de loisir (jardinage, promenade)
 
 <!-- Toast Notification -->
 {#if showToast}
-	<div class="toast {!showToast ? 'fade-out' : ''}">
-		<div class="toast-icon">
+	<div class="fixed top-8 right-8 bg-white p-4 pr-6 rounded-xl shadow-xl flex items-center gap-3 min-w-80 max-w-md z-50 border-l-4 border-green-500 {!showToast ? 'animate-[fadeOut_0.3s_ease-out_forwards]' : 'animate-[slideIn_0.3s_ease-out]'}">
+		<div class="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center text-white flex-shrink-0">
 			✓
 		</div>
-		<div class="toast-message">
+		<div class="flex-1 text-gray-800 font-medium">
 			{toastMessage}
 		</div>
 	</div>
 {/if}
 
-<div class="full-screen">
+<div class="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 pt-4">
 	<!-- Content Area -->
-	<div class="content-area">
+	<div class="p-8 max-w-7xl mx-auto">
 		{#if error}
-			<div class="alert alert-error">{error}</div>
+			<div class="p-4 rounded-lg mb-4 font-medium bg-red-50 text-red-800 border border-red-200">{error}</div>
 		{/if}
 		
 		{#if loading}
-			<div style="display: flex; justify-content: center; padding: 4rem;">
-				<div class="loading-spinner"></div>
+			<div class="flex justify-center py-16">
+				<div class="inline-block w-12 h-12 border-3 border-blue-900/10 rounded-full border-t-blue-900 animate-spin"></div>
+			</div>
+		{:else if generatingAI}
+			<!-- Loader spécial pour génération IA -->
+			<div class="flex flex-col items-center justify-center py-16">
+				<div class="inline-block w-12 h-12 border-3 border-blue-900/10 rounded-full border-t-blue-900 animate-spin"></div>
+				<p class="mt-4 text-blue-900 font-semibold">🤖 Génération des recommandations IA en cours...</p>
+				<p class="text-gray-600 text-sm text-center max-w-md">
+					L'intelligence artificielle analyse vos réponses pour créer des recommandations personnalisées. 
+					Cela peut prendre quelques secondes.
+				</p>
 			</div>
 		{:else if currentView === 'questionnaire'}
 			<!-- Questionnaire View -->
-			<div class="questionnaire-container">
-				<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; padding-bottom: 1.5rem; border-bottom: 2px solid #e5e7eb;">
-					<div>
-						<h2 style="font-size: 1.5rem; font-weight: 700; color: #111827;">
-							Formulaire de santé
-						</h2>
-						<p style="color: #6b7280; margin-top: 0.25rem;">
-							{questions.length} questions • {answers.length} réponses
-							{#if hasChanges}
-								<span style="color: #f59e0b; margin-left: 0.5rem;">⚠️ Modifications non sauvegardées</span>
-							{/if}
-						</p>
-					</div>
-					<div style="display: flex; gap: 0.75rem;">
-						{#if !editMode}
-							<button class="btn-primary" onclick={() => editMode = true}>
-								✏️ Modifier
-							</button>
-						{:else}
-							<button class="btn-ghost" onclick={cancelChanges}>
-								Annuler
-							</button>
-							{#if hasChanges}
-								<button class="btn-secondary" onclick={saveAllChanges} disabled={saving}>
-									{saving ? '⏳ Sauvegarde...' : '💾 Sauvegarder'}
-								</button>
-							{/if}
-							<button class="btn-primary" onclick={handleSubmit} disabled={saving}>
-								{saving ? '⏳ En cours...' : '🚀 Soumettre & Générer IA'}
-							</button>
-						{/if}
-					</div>
-				</div>
-				
-				<!-- Sections and Questions -->
-				{#each sections as section}
-					{@const sectionQuestions = getQuestionsForSection(section.id)}
-					<div class="section-card">
-						<h3 class="section-title">
-							{section.name}
-							<span style="font-weight: 400; color: #9ca3af; margin-left: 0.5rem; font-size: 0.875rem;">
-								({sectionQuestions.length} questions)
-							</span>
-						</h3>
-						{#if section.description}
-							<p style="color: #6b7280; margin-bottom: 1rem; font-size: 0.875rem;">
-								{section.description}
-							</p>
-						{/if}
-						
-						<div style="margin-top: 1rem;">
-							{#each sectionQuestions as question}
-								<QuestionItem
-									question={question}
-									answers={answers}
-									editMode={editMode}
-									onUpdate={handleUpdateAnswer}
-								/>
-							{/each}
-						</div>
-					</div>
-				{/each}
-				
-				<!-- Orphan Questions -->
-				{#each [buildQuestionTree(questions.filter(q => !q.section_id && !q.parent_id), null)] as orphanQuestions}
-					{#if orphanQuestions.length > 0}
-						<div class="section-card" style="background: #f9fafb;">
-							<h3 class="section-title" style="color: #6b7280;">
-								Autres questions
-							</h3>
-							<div style="margin-top: 1rem;">
-								{#each orphanQuestions as question}
-									<QuestionItem
-										question={question}
-										answers={answers}
-										editMode={editMode}
-										onUpdate={handleUpdateAnswer}
-									/>
-								{/each}
-							</div>
-						</div>
-					{/if}
-				{/each}
-			</div>
+			<QuestionnaireForm
+				bind:editMode
+				{questions}
+				{sections}
+				{answers}
+				{hasChanges}
+				{saving}
+				{generatingAI}
+				onUpdateAnswer={handleUpdateAnswer}
+				onCancelChanges={cancelChanges}
+				onSaveChanges={saveAllChanges}
+				onSubmit={handleSubmit}
+			/>
 			
 		{:else if currentView === 'prescription'}
 			<!-- Prescription Médicale View -->
-			<div style="margin-bottom: 1rem;">
-				<button class="btn-ghost" onclick={() => goto(`/dashboard/submission/${$page.params.id}?view=questionnaire`)}>
-					← Retour au questionnaire
-				</button>
-				<button class="btn-secondary" onclick={() => goto(`/dashboard/submission/${$page.params.id}?view=conseils`)} style="margin-left: 0.5rem;">
-					Voir les conseils →
-				</button>
-			</div>
 			<PrescriptionMedicale 
 				submission={submission}
 				aiResponse={aiResponseData}
 			/>
 		{:else if currentView === 'conseils'}
 			<!-- Page Conseils View -->
-			<div style="margin-bottom: 1rem;">
-				<button class="btn-secondary" onclick={() => goto(`/dashboard/submission/${$page.params.id}?view=prescription`)}>
-					← Voir la prescription
-				</button>
-				<button class="btn-ghost" onclick={() => goto(`/dashboard/submission/${$page.params.id}?view=questionnaire`)} style="margin-left: 0.5rem;">
-					Retour au questionnaire
-				</button>
-			</div>
 			<PageConseilsAPA 
 				submission={submission}
 				aiResponse={aiResponseData}

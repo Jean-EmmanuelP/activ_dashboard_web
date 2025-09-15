@@ -50,6 +50,7 @@
 		"@ckeditor/ckeditor5-table": "^46.0.3",
 		"@google/genai": "^1.16.0",
 		"@supabase/supabase-js": "^2.56.0",
+		"@tinymce/tinymce-svelte": "^3.2.0",
 		"@tiptap/core": "^3.4.1",
 		"@tiptap/extension-color": "^3.4.1",
 		"@tiptap/extension-font-family": "^3.4.1",

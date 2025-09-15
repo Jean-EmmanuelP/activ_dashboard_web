@@ -1,0 +1,111 @@
+{
+  "title": "Conditions Générales",
+  "lastUpdated": "Date de dernière mise à jour : 22 juin 2025",
+  "welcome": "Bienvenue sur ACTIV, une brique de l'écosystème SANO, dédiée à la promotion de l'activité physique adaptée 🤸‍♀️💪. L'accès et l'utilisation de cette application impliquent l'acceptation sans réserve des présentes CGU.",
+  "sections": {
+    "cgu": {
+      "title": "📜 CONDITIONS GÉNÉRALES D'UTILISATION (CGU)",
+      "subsections": {
+        "1": {
+          "title": "1. Objet de l'application",
+          "content": "ACTIV est un outil de prévention santé et d'accompagnement à l'activité physique, basé sur des recommandations scientifiques et un questionnaire afin d'optimiser la pertinence de ces réponses.\n\n• Facilitant l'orientation vers les professionnels et structures locales adaptées\n• Offrant des documents types : ordonnances, certificats, fiches pratiques\n\nIl n'a pas vocation à diagnostiquer, surveiller ou traiter une pathologie. Il ne remplace par l'avis médical et ne constitue pas un dispositif médical au sens du Règlement (UE) 2017/745."
+        },
+        "2": {
+          "title": "2. Informations éditeur",
+          "content": "Les informations relatives à l'éditeur, à l'hébergeur HDS et au directeur de publication sont disponibles dans les Mentions légales."
+        },
+        "3": {
+          "title": "3. Accès au service",
+          "content": "L'utilisation d'ACTIV est possible par tous. Le questionnaire pour obtenir des conseils personnalisés et protégé par une clé de sécurité.\n\nLes services peuvent évoluer selon les projets de l'écosystème Sano."
+        },
+        "4": {
+          "title": "4. Conditions d'utilisation",
+          "content": "Les données sont traitées conformément à notre Politique de confidentialité."
+        },
+        "5": {
+          "title": "5. Propriété intellectuelle",
+          "content": "Tous les éléments de l'application ACTIV (textes, images, codes, contenus générés) sont protégés par le droit d'auteur et appartiennent à Sano, sauf mention contraire. Toute reproduction, même partielle, est interdite sans autorisation."
+        },
+        "6": {
+          "title": "6. Données personnelles",
+          "content": "Pour tout ce qui concerne vos données personnelles (accès, suppression, droits RGPD), voir notre Politique de confidentialité."
+        },
+        "7": {
+          "title": "7. Limitations de responsabilité",
+          "content": "L'éditeur ne peut être tenu pour responsable des décisions prises sur la seule base des conseils fournis par l'application.\n\nCertaines données pratiques (structures locales, adresses, contacts) sont récupérées automatiquement et peuvent être obsolètes (même degré de pertinence que des moteurs de recherche et d'intelligence artificielle classiques).\n\nLes conseils fournis par l'application ACTIV sont générés à l'aide d'un algorithme d'intelligence artificielle s'appuyant sur des données scientifiques fiables (HAS, PubMed, IRBMS, etc.). Ils ne constituent en aucun cas un avis médical personnalisé. En application du règlement européen sur l'intelligence artificielle (IA Act) et des recommandations de la CNIL, toute recommandation générée par ACTIV doit être relue, validée et adaptée par un professionnel de santé qualifié (médecin ou professionnel habilité), avant d'être suivie par le patient. ACTIV met à disposition des outils (PDF, lien sécurisé, export) pour faciliter cette validation."
+        },
+        "8": {
+          "title": "8. Suspension ou interruption du service",
+          "content": "L'éditeur peut à tout moment suspendre ou modifier l'application pour maintenance, évolution ou cas de force majeure, sans obligation de préavis."
+        },
+        "9": {
+          "title": "9. Modifications des CGU",
+          "content": "Les présentes CGU peuvent être modifiées à tout moment. La version applicable est celle publiée au moment de l'utilisation."
+        }
+      }
+    },
+    "cgv": {
+      "title": "💳 CONDITIONS GÉNÉRALES DE VENTE (CGV)",
+      "subsections": {
+        "1": {
+          "title": "1. Objet",
+          "content": "Les CGV régissent les modalités de souscription aux services payants proposés par ACTIV, notamment pour les professionnels (accès complet, ordonnances types, gestion multi-patients, personnalisation)."
+        },
+        "2": {
+          "title": "2. Tarification",
+          "content": "L'abonnement à ACTIV est proposé au tarif de 9,99 € par mois, sans engagement.\n\nUne version gratuite de l'application est disponible avec les fonctionnalités de base (évaluer son niveau d'activité physique, ordonnances types, quelques orientations)."
+        },
+        "3": {
+          "title": "3. Modalités de paiement",
+          "content": "• Paiement via carte bancaire ou prélèvement automatique\n• Facturation à la souscription puis renouvellement automatique sauf résiliation\n• Une facture est émise à chaque paiement"
+        },
+        "4": {
+          "title": "4. Rétractation",
+          "content": "Le droit de rétractation de 14 jours s'annule dès l'accès aux services personnalisés (documents, recommandations...)."
+        },
+        "5": {
+          "title": "5. Résiliation",
+          "content": "Résiliation possible à tout moment depuis son espace personnel.\nL'accès premium est interrompu à la fin de la période en cours, sans remboursement partiel."
+        }
+      }
+    },
+    "privacy": {
+      "title": "🛡️ Politique de confidentialité",
+      "intro": "La confidentialité de vos données est notre priorité 🤝\n\nChez ACTIV, nous nous engageons à protéger vos informations personnelles, en respectant le Règlement Général sur la Protection des Données (RGPD) et les exigences d'hébergement de données de santé (HDS).",
+      "subsections": {
+        "1": {
+          "title": "1. 📌 Qui est responsable du traitement ?",
+          "content": "Le responsable du traitement est :\nSANO SYSTEM\n📧 contact@sano-system.fr"
+        },
+        "2": {
+          "title": "2. 🧾 Quelles données sont collectées ?",
+          "content": "Nous collectons uniquement les données nécessaires à votre accompagnement :\n• Données d'identification : âge, sexe, code postal\n• Données de santé : pathologies, limitations, traitements en cours (si vous les renseignez)\n• Données d'usage : réponses aux questionnaires, navigation sur l'app"
+        },
+        "3": {
+          "title": "3. 🎯 Pourquoi sont-elles collectées ?",
+          "content": "Pour vous proposer :\n• des conseils personnalisés\n• un programme d'activité physique adapté\n• une orientation vers les structures proches de chez vous\n• un suivi de vos progrès"
+        },
+        "4": {
+          "title": "4. 📤 Qui peut y accéder ?",
+          "content": "Vos données sont strictement confidentielles.\n🔒 Accès limité à :\n• l'équipe Sano (accès restreint, encadré)\n• les professionnels de santé que vous autorisez"
+        },
+        "5": {
+          "title": "5. 📦 Où sont-elles stockées ?",
+          "content": "Les données sont hébergées sur des serveurs agréés HDS (Hébergement de Données de Santé), situés en France ou en Europe."
+        },
+        "6": {
+          "title": "6. ⏳ Combien de temps sont-elles conservées ?",
+          "content": "5 ans après votre dernière activité sur l'application.\nVous pouvez demander leur suppression à tout moment, sans justification."
+        },
+        "7": {
+          "title": "7. 🧑‍⚖️ Quels sont vos droits ?",
+          "content": "Conformément au RGPD, vous disposez de :\n• Droit d'accès : voir vos données\n• Droit de rectification : corriger une erreur\n• Droit d'effacement : supprimer vos données\n• Droit à la portabilité : recevoir vos données\n• Droit d'opposition : refuser un traitement\n📧 Pour exercer vos droits : rgpd@sano-system.fr"
+        }
+      }
+    },
+    "legal": {
+      "title": "📍 Mentions légales",
+      "content": "Éditeur du site / de l'application\nLe site et l'application ACTIV font partie de l'écosystème Sano, une solution numérique dédiée à la prévention et à la santé pour tous.\n\nÉdité par : SANO SYSTEM\n📧 Contact : contact@sano-system.fr\n\nDirecteur de la publication\nDr Baptiste Mazas\nMédecin spécialiste en médecine du sport, nutrition et prévention cardio-métabolique.\n\nConception et développement\nJean-Emmanuel — École 42\nAvec le soutien de l'équipe projet Sano."
+    }
+  }
+}

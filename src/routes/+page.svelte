@@ -25,12 +25,23 @@
 
 		try {
 			if (isSignUp) {
+				console.log('🚀 Tentative d\'inscription pour:', email);
 				await auth.signUp(email, password, firstName, lastName);
+				console.log('✅ Inscription réussie');
 			} else {
+				console.log('🚀 Tentative de connexion pour:', email);
 				await auth.signIn(email, password);
+				console.log('✅ Connexion réussie');
 			}
-			goto('/dashboard');
+			
+			// Redirection avec délai pour laisser le temps à l'état de se mettre à jour
+			console.log('🔄 Redirection vers le dashboard...');
+			setTimeout(() => {
+				goto('/dashboard');
+			}, 100);
+			
 		} catch (err) {
+			console.error('❌ Erreur d\'authentification:', err);
 			error = err instanceof Error ? err.message : 'Une erreur est survenue';
 		} finally {
 			loading = false;
