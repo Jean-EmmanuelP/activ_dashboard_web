@@ -21,7 +21,9 @@
 		rpps: '[RPPS]',
 		address: '[Adresse du cabinet]',
 		phone: '[Téléphone]',
-		email: '[Email]'
+		email: '[Email]',
+		signature: '',
+		signatureUrl: ''
 	});
 
 	let patientInfo = $state({
@@ -228,9 +230,41 @@
 					<div style="margin-top: 1.5rem; font-style: italic; font-size: 11px; text-align: center;">
 						*Nos conseils ne remplacent pas une consultation médicale*
 					</div>
+
+					<!-- Signature du médecin -->
+					<div style="margin-top: 2rem; text-align: right;">
+						<div style="margin-bottom: 1rem;">
+							<p style="font-size: 11px; font-weight: 600; margin-bottom: 0.5rem;">Signature du médecin :</p>
+							${doctorInfo.signatureUrl ? `
+								<img src="${doctorInfo.signatureUrl}" alt="Signature" style="max-height: 60px; max-width: 200px; object-fit: contain;" />
+							` : `
+								<div style="border: 1px solid #ccc; padding: 1rem; width: 200px; height: 60px; display: inline-block; text-align: center; background-color: #f9f9f9;">
+									<p style="font-size: 10px; color: #666; margin: 0; line-height: 60px;">Signature électronique</p>
+								</div>
+							`}
+						</div>
+						<p style="font-size: 10px; margin: 0;">${doctorInfo.name}</p>
+					</div>
 				`}
 			</div>
 		`;
+	}
+
+	async function loadDoctorSignature() {
+		if (!doctorInfo.signature) return;
+		
+		try {
+			// Créer une URL signée pour afficher l'image
+			const { data, error } = await supabase.storage
+				.from('signatures')
+				.createSignedUrl(doctorInfo.signature, 600); // 10 minutes
+			
+			if (!error && data?.signedUrl) {
+				doctorInfo.signatureUrl = data.signedUrl;
+			}
+		} catch (err) {
+			console.warn('Erreur chargement signature:', err);
+		}
 	}
 
 	onMount(async () => {
@@ -240,7 +274,7 @@
 			const { data } = await supabase
 				.from('users')
 				.select('*')
-				.eq('email', authUser.email)
+				.eq('auth_user_id', authUser.id)
 				.single();
 			if (data) {
 				doctorInfo.name = `Dr. ${data.first_name} ${data.last_name}`;
@@ -248,6 +282,10 @@
 				if (data.address) doctorInfo.address = data.address;
 				if (data.phone) doctorInfo.phone = data.phone;
 				if (data.email) doctorInfo.email = data.email;
+				if (data.signature) {
+					doctorInfo.signature = data.signature;
+					await loadDoctorSignature();
+				}
 			}
 		}
 		
@@ -268,6 +306,13 @@
 	// Mettre à jour le contenu quand aiResponse change
 	$effect(() => {
 		content = generateConseilsContent();
+	});
+
+	// Recharger la signature quand nécessaire
+	$effect(() => {
+		if (doctorInfo.signature && !doctorInfo.signatureUrl) {
+			loadDoctorSignature();
+		}
 	});
 
 	function handlePrint() {

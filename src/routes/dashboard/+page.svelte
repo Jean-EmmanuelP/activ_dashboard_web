@@ -107,13 +107,13 @@
 </script>
 
 <div class="container mx-auto p-8">
-	<h1 class="mb-8 lato-black" style="color: var(--color-gray-900);">
+	<h1 class="mb-8 inter-black" style="color: var(--color-gray-900); padding-top: 2rem;">
 		Rechercher le questionnaire d'un patient
 	</h1>
 
 	<div class="card mb-8">
 		<div class="mb-4">
-			<p class="lato-regular text-sm" style="color: var(--color-gray-600);">
+			<p class="inter-regular text-sm" style="color: var(--color-gray-600);">
 				💡 Tapez les premiers caractères de la clé sécurisée du patient (ex: 7d2 pour 7d27eb11...)
 			</p>
 		</div>
@@ -190,10 +190,10 @@
 
 	<div class="card">
 		<div class="mb-6 text-center">
-			<h2 class="lato-bold text-xl" style="color: var(--color-gray-800);">
+			<h2 class="inter-bold text-xl" style="color: var(--color-gray-800);">
 				Submissions récentes
 			</h2>
-			<p class="lato-regular text-sm mt-1" style="color: var(--color-gray-600);">
+			<p class="inter-regular text-sm mt-1" style="color: var(--color-gray-600);">
 				Les 10 dernières submissions créées
 			</p>
 		</div>
@@ -216,7 +216,7 @@
 								<div class="flex justify-center">
 									<div class="spinner"></div>
 								</div>
-								<p class="mt-3 lato-regular" style="color: var(--color-gray-500);">
+								<p class="mt-3 inter-regular" style="color: var(--color-gray-500);">
 									Chargement des submissions...
 								</p>
 							</td>
@@ -230,17 +230,17 @@
 								</span>
 							</td>
 							<td>
-								<span class="lato-regular" style="font-family: monospace; font-size: 0.875rem; color: var(--color-gray-600);">
+								<span class="inter-regular" style="font-family: monospace; font-size: 0.875rem; color: var(--color-gray-600);">
 									{submission.secure_key.slice(0, 8)}...
 								</span>
 							</td>
 							<td>
-								<span class="lato-regular" style="color: var(--color-gray-600);">
+								<span class="inter-regular" style="color: var(--color-gray-600);">
 									{new Date(submission.updated_at || '').toLocaleDateString('fr-FR')}
 								</span>
 							</td>
 							<td>
-								<span class="lato-regular" style="color: var(--color-gray-700);">
+								<span class="inter-regular" style="color: var(--color-gray-700);">
 									{submission.submission_count}
 								</span>
 							</td>
@@ -266,6 +266,28 @@
 </div>
 
 <style>
+	/* Classes Inter */
+	:global(.inter-regular) {
+		font-family: "Inter", sans-serif;
+		font-optical-sizing: auto;
+		font-weight: 400;
+		font-style: normal;
+	}
+
+	:global(.inter-bold) {
+		font-family: "Inter", sans-serif;
+		font-optical-sizing: auto;
+		font-weight: 700;
+		font-style: normal;
+	}
+
+	:global(.inter-black) {
+		font-family: "Inter", sans-serif;
+		font-optical-sizing: auto;
+		font-weight: 900;
+		font-style: normal;
+	}
+
 	/* Barre de recherche moderne */
 	.search-input {
 		width: 100%;
@@ -273,8 +295,10 @@
 		border: 2px solid #e5e7eb;
 		border-radius: 12px;
 		font-size: 1rem;
-		font-family: 'Lato', sans-serif;
+		font-family: 'Inter', sans-serif;
+		font-optical-sizing: auto;
 		font-weight: 400;
+		font-style: normal;
 		color: #374151;
 		background-color: #ffffff;
 		transition: all 0.2s ease;

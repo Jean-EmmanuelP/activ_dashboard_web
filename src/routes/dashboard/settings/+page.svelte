@@ -3,24 +3,37 @@
 	import { auth } from '$lib/stores/auth';
 	import { Button, Alert } from 'flowbite-svelte';
 	import { onMount } from 'svelte';
-	import { UserCircle, Mail, FileSignature, Calendar, Shield, Check, Upload, Trash2 } from 'lucide-svelte';
-	import { uploadSignature, getSignedSignatureUrl, deleteSignature } from '$lib/signature';
+	import { UserCircle, Mail, FileSignature, Check, Upload, X } from 'lucide-svelte';
 
 	let user = $state<any>(null);
 	let firstName = $state('');
 	let lastName = $state('');
 	let email = $state('');
 	let signature = $state('');
+	let signatureFile = $state<File | null>(null);
+	let signaturePreview = $state('');
+	let uploadingSignature = $state(false);
 	let loading = $state(false);
 	let success = $state('');
 	let error = $state('');
 	
-	// Signature image variables
-	let signatureFile = $state<File | null>(null);
-	let signaturePreview = $state<string | null>(null);
-	let signatureLoading = $state(false);
-	let signatureError = $state('');
-	let signatureSuccess = $state('');
+
+	async function loadSignaturePreview() {
+		if (!signature) return;
+		
+		try {
+			// Créer une URL signée pour afficher l'image
+			const { data, error } = await supabase.storage
+				.from('signatures')
+				.createSignedUrl(signature, 600); // 10 minutes
+			
+			if (!error && data?.signedUrl) {
+				signaturePreview = data.signedUrl;
+			}
+		} catch (err) {
+			console.warn('Erreur chargement signature:', err);
+		}
+	}
 
 	onMount(async () => {
 		const unsubscribe = auth.subscribe(async (state) => {
@@ -31,17 +44,113 @@
 				email = state.user.email;
 				signature = state.user.signature || '';
 				
-				// Load signature image preview
-				try {
-					signaturePreview = await getSignedSignatureUrl();
-				} catch (err) {
-					console.log('No signature image found');
+				// Charger la prévisualisation si une signature existe
+				if (signature) {
+					await loadSignaturePreview();
 				}
 			}
 		});
 
 		return unsubscribe;
 	});
+
+	async function handleSignatureUpload(event: Event) {
+		const input = event.target as HTMLInputElement;
+		const file = input.files?.[0];
+		
+		if (!file) return;
+		
+		// Vérifier le type de fichier
+		if (!file.type.startsWith('image/')) {
+			error = 'Veuillez sélectionner un fichier image';
+			setTimeout(() => error = '', 3000);
+			return;
+		}
+		
+		// Vérifier la taille (max 1MB)
+		if (file.size > 1_000_000) {
+			error = 'L\'image ne doit pas dépasser 1MB';
+			setTimeout(() => error = '', 3000);
+			return;
+		}
+		
+		signatureFile = file;
+		
+		// Créer une preview
+		const reader = new FileReader();
+		reader.onload = (e) => {
+			signaturePreview = e.target?.result as string;
+		};
+		reader.readAsDataURL(file);
+	}
+
+	async function uploadSignatureImage() {
+		if (!signatureFile || !user) return null;
+		
+		uploadingSignature = true;
+		try {
+			// Récupérer l'utilisateur authentifié
+			const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+			if (authError || !authUser) throw new Error('Non authentifié');
+
+			const path = `${authUser.id}/signature.png`; // chemin canonique
+
+			const { error: uploadError } = await supabase.storage
+				.from('signatures')
+				.upload(path, signatureFile, {
+					upsert: true,          // IMPORTANT: remplace l'ancienne
+					cacheControl: '0',
+					contentType: signatureFile.type || 'image/png'
+				});
+
+			if (uploadError) throw uploadError;
+
+			return path; // Retourner le chemin, pas l'URL
+		} catch (err) {
+			console.error('Erreur upload:', err);
+			throw err;
+		} finally {
+			uploadingSignature = false;
+		}
+	}
+
+	async function removeSignature() {
+		if (!user) return;
+		
+		try {
+			// Récupérer l'utilisateur authentifié
+			const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+			if (authError || !authUser) throw new Error('Non authentifié');
+
+			const path = `${authUser.id}/signature.png`;
+			
+			// Supprimer du storage
+			const { error: deleteError } = await supabase.storage
+				.from('signatures')
+				.remove([path]);
+			
+			if (deleteError) console.warn('Erreur suppression storage:', deleteError);
+
+			// Nettoyer la colonne en base
+			const { error: updateError } = await supabase
+				.from('users')
+				.update({ signature: null })
+				.eq('auth_user_id', authUser.id);
+
+			if (updateError) throw updateError;
+
+			// Nettoyer les variables locales
+			signatureFile = null;
+			signaturePreview = '';
+			signature = '';
+			
+			auth.checkUser();
+		} catch (err) {
+			console.error('Erreur suppression signature:', err);
+			error = err instanceof Error ? err.message : 'Erreur lors de la suppression';
+			setTimeout(() => error = '', 3000);
+		}
+	}
 
 	async function updateProfile() {
 		if (!user) return;
@@ -51,20 +160,38 @@
 		success = '';
 
 		try {
+			// Récupérer l'utilisateur authentifié
+			const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+			if (authError || !authUser) throw new Error('Non authentifié');
+
+			let signaturePath = signature;
+			
+			// Upload de la nouvelle signature si présente
+			if (signatureFile) {
+				const uploadedPath = await uploadSignatureImage();
+				if (uploadedPath) {
+					signaturePath = uploadedPath;
+				}
+			}
+
 			const { data, error: updateError } = await supabase
 				.from('users')
 				.update({
 					first_name: firstName,
 					last_name: lastName,
-					signature: signature,
+					signature: signaturePath,
 					updated_at: new Date().toISOString()
 				})
-				.eq('id', user.id)
+				.eq('auth_user_id', authUser.id)
 				.select()
 				.single();
 
 			if (updateError) throw updateError;
 
+			// Mettre à jour les variables locales
+			signature = signaturePath;
+			signatureFile = null;
+			
 			auth.checkUser();
 			success = 'Profil mis à jour avec succès';
 			setTimeout(() => success = '', 3000);
@@ -75,77 +202,14 @@
 		}
 	}
 
-	function formatDate(dateString: string | null) {
-		if (!dateString) return 'Non disponible';
-		return new Date(dateString).toLocaleDateString('fr-FR', {
-			day: 'numeric',
-			month: 'long',
-			year: 'numeric'
-		});
-	}
 
-	async function handleSignatureUpload() {
-		if (!signatureFile) {
-			signatureError = 'Sélectionnez un fichier.';
-			return;
-		}
 
-		signatureLoading = true;
-		signatureError = '';
-		signatureSuccess = '';
-
-		try {
-			await uploadSignature(signatureFile);
-			signaturePreview = await getSignedSignatureUrl();
-			signatureSuccess = 'Signature mise à jour avec succès';
-			setTimeout(() => signatureSuccess = '', 3000);
-		} catch (err: any) {
-			signatureError = err?.message ?? 'Erreur lors de l\'upload';
-		} finally {
-			signatureLoading = false;
-		}
-	}
-
-	async function handleSignatureDelete() {
-		signatureLoading = true;
-		signatureError = '';
-		signatureSuccess = '';
-
-		try {
-			await deleteSignature();
-			signaturePreview = null;
-			signatureSuccess = 'Signature supprimée avec succès';
-			setTimeout(() => signatureSuccess = '', 3000);
-		} catch (err: any) {
-			signatureError = err?.message ?? 'Erreur lors de la suppression';
-		} finally {
-			signatureLoading = false;
-		}
-	}
-
-	function handleFileChange(event: Event) {
-		const target = event.target as HTMLInputElement;
-		const file = target.files?.[0];
-		if (file) {
-			// Validate file type and size
-			if (!file.type.startsWith('image/')) {
-				signatureError = 'Type de fichier invalide. Veuillez sélectionner une image.';
-				return;
-			}
-			if (file.size > 1_000_000) {
-				signatureError = 'Fichier trop volumineux. Taille maximum : 1 Mo.';
-				return;
-			}
-			signatureFile = file;
-			signatureError = '';
-		}
-	}
 </script>
 
 <div class="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
 	<div class="container mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
 		<!-- Header -->
-		<div class="mb-8">
+		<div class="mb-8" style="padding-top: 2rem;">
 			<h1 class="text-3xl font-bold text-gray-900">Paramètres du compte</h1>
 			<p class="mt-2 text-gray-600">Gérez vos informations personnelles et vos préférences</p>
 		</div>
@@ -170,9 +234,8 @@
 			</div>
 		{/if}
 
-		<div class="grid gap-6 lg:grid-cols-3">
+		<div class="max-w-4xl mx-auto">
 			<!-- Main Content Area -->
-			<div class="lg:col-span-2 space-y-6">
 				<!-- Personal Information Card -->
 				<div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
 					<div class="bg-gradient-to-r from-blue-50 to-indigo-50 px-6 py-4 border-b border-gray-200">
@@ -232,124 +295,86 @@
 							<p class="text-xs text-gray-500 mt-1">L'adresse email ne peut pas être modifiée pour des raisons de sécurité</p>
 						</div>
 
-						<div class="space-y-2">
-							<label for="signature" class="block text-sm font-medium text-gray-700">
+						<div class="space-y-3">
+							<label class="block text-sm font-medium text-gray-700">
 								<div class="flex items-center gap-2">
 									<FileSignature class="h-4 w-4" />
-									Signature électronique (texte)
+									Signature électronique (image)
 								</div>
 							</label>
-							<textarea
-								id="signature"
-								bind:value={signature}
-								disabled={loading}
-								rows="4"
-								class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 disabled:bg-gray-50 disabled:text-gray-500 resize-none"
-								placeholder="Votre signature sera ajoutée automatiquement aux documents générés"
-							/>
-							<p class="text-xs text-gray-500 mt-1">Cette signature apparaîtra sur les prescriptions et recommandations</p>
-						</div>
-
-						<!-- Signature Image Section -->
-						<div class="space-y-4 border-t border-gray-200 pt-6">
-							<div class="flex items-center gap-2">
-								<FileSignature class="h-5 w-5 text-gray-700" />
-								<h3 class="text-lg font-medium text-gray-900">Signature numérisée</h3>
-							</div>
 							
-							{#if signatureSuccess}
-								<div class="animate-fade-in">
-									<Alert color="green" class="border-l-4 border-green-500">
-										<div class="flex items-center gap-2">
-											<Check class="h-5 w-5" />
-											<span>{signatureSuccess}</span>
-										</div>
-									</Alert>
-								</div>
-							{/if}
-
-							{#if signatureError}
-								<div class="animate-fade-in">
-									<Alert color="red" class="border-l-4 border-red-500">
-										{signatureError}
-									</Alert>
-								</div>
-							{/if}
-
-							<div class="space-y-4">
-								<div class="space-y-2">
-									<label for="signature-file" class="block text-sm font-medium text-gray-700">
-										Téléverser votre signature
-									</label>
-									<input
-										id="signature-file"
-										type="file"
-										accept="image/*"
-										onchange={handleFileChange}
-										disabled={signatureLoading}
-										class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 disabled:bg-gray-50 disabled:text-gray-500"
-									/>
-									<p class="text-xs text-gray-500">Formats acceptés : JPG, PNG, GIF. Taille maximum : 1 Mo</p>
-								</div>
-
-								<div class="flex gap-3">
-									<Button
-										onclick={handleSignatureUpload}
-										disabled={signatureLoading || !signatureFile}
-										class="bg-blue-600 hover:bg-blue-700 focus:ring-4 focus:ring-blue-200 transition-all duration-200"
-									>
-										{#if signatureLoading}
-											<span class="flex items-center gap-2">
-												<svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-													<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-													<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-												</svg>
-												Upload...
-											</span>
-										{:else}
-											<span class="flex items-center gap-2">
-												<Upload class="h-4 w-4" />
-												Upload / Remplacer
-											</span>
-										{/if}
-									</Button>
-
-									{#if signaturePreview}
-										<Button
-											onclick={handleSignatureDelete}
-											disabled={signatureLoading}
-											color="red"
-											class="bg-red-600 hover:bg-red-700 focus:ring-4 focus:ring-red-200 transition-all duration-200"
-										>
-											<span class="flex items-center gap-2">
-												<Trash2 class="h-4 w-4" />
-												Supprimer
-											</span>
-										</Button>
-									{/if}
-								</div>
-
-								<!-- Preview -->
-								<div class="space-y-2">
-									{#if signaturePreview}
-										<div class="border border-gray-200 rounded-lg p-4 bg-gray-50">
-											<p class="text-sm font-medium text-gray-700 mb-2">Aperçu de votre signature :</p>
-											<img 
-												src={signaturePreview} 
-												alt="Signature du médecin" 
-												class="max-w-xs max-h-32 object-contain border border-gray-300 rounded bg-white p-2"
+							<!-- Zone d'upload -->
+							{#if !signaturePreview}
+								<div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
+									<Upload class="mx-auto h-12 w-12 text-gray-400 mb-3" />
+									<div class="space-y-2">
+										<p class="text-sm text-gray-600">Glissez-déposez votre signature ou</p>
+										<label class="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 cursor-pointer transition-colors">
+											<Upload class="h-4 w-4 mr-2" />
+											Choisir un fichier
+											<input
+												type="file"
+												class="hidden"
+												accept="image/*"
+												onchange={handleSignatureUpload}
+												disabled={loading || uploadingSignature}
 											/>
-											<p class="text-xs text-gray-500 mt-2">URL signée, expire dans 10 minutes</p>
-										</div>
-									{:else}
-										<div class="border border-gray-200 rounded-lg p-4 bg-gray-50 text-center">
-											<FileSignature class="h-12 w-12 text-gray-400 mx-auto mb-2" />
-											<p class="text-sm text-gray-600">Aucune signature pour le moment</p>
+										</label>
+									</div>
+									<p class="text-xs text-gray-500 mt-2">PNG, JPG, JPEG jusqu'à 1MB</p>
+								</div>
+							{:else}
+								<!-- Prévisualisation de la signature -->
+								<div class="border border-gray-300 rounded-lg p-4 bg-gray-50">
+									<div class="flex items-start justify-between mb-3">
+										<p class="text-sm font-medium text-gray-700">Signature actuelle :</p>
+										<button
+											type="button"
+											onclick={removeSignature}
+											class="text-red-600 hover:text-red-800 transition-colors"
+											disabled={loading}
+										>
+											<X class="h-4 w-4" />
+										</button>
+									</div>
+									<div class="flex justify-center">
+										<img 
+											src={signaturePreview} 
+											alt="Signature" 
+											class="max-h-20 max-w-full object-contain border border-gray-200 rounded bg-white p-2"
+										/>
+									</div>
+									{#if !signatureFile}
+										<div class="mt-3 text-center">
+											<label class="inline-flex items-center px-3 py-1.5 bg-gray-600 text-white text-xs font-medium rounded cursor-pointer hover:bg-gray-700 transition-colors">
+												<Upload class="h-3 w-3 mr-1" />
+												Changer
+												<input
+													type="file"
+													class="hidden"
+													accept="image/*"
+													onchange={handleSignatureUpload}
+													disabled={loading || uploadingSignature}
+												/>
+											</label>
 										</div>
 									{/if}
 								</div>
-							</div>
+							{/if}
+							
+							{#if uploadingSignature}
+								<div class="flex items-center gap-2 text-sm text-blue-600">
+									<svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+										<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+										<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+									</svg>
+									Upload en cours...
+								</div>
+							{/if}
+							
+							<p class="text-xs text-gray-500">Cette signature apparaîtra sur les prescriptions et recommandations</p>
 						</div>
+
 
 						<div class="pt-4">
 							<Button 
@@ -372,75 +397,6 @@
 						</div>
 					</form>
 				</div>
-			</div>
-
-			<!-- Sidebar -->
-			<div class="space-y-6">
-				<!-- Account Information Card -->
-				<div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-					<div class="bg-gradient-to-r from-purple-50 to-pink-50 px-6 py-4 border-b border-gray-200">
-						<div class="flex items-center gap-3">
-							<div class="p-2 bg-purple-100 rounded-lg">
-								<Shield class="h-5 w-5 text-purple-600" />
-							</div>
-							<h2 class="text-lg font-semibold text-gray-900">Informations du compte</h2>
-						</div>
-					</div>
-					
-					<div class="p-6 space-y-4">
-						<div class="flex items-start gap-3">
-							<div class="mt-1">
-								<div class="p-1.5 bg-gray-100 rounded">
-									<UserCircle class="h-4 w-4 text-gray-600" />
-								</div>
-							</div>
-							<div class="flex-1">
-								<p class="text-sm font-medium text-gray-900">Rôle</p>
-								<p class="text-sm text-gray-600 capitalize">{user?.role || 'Médecin'}</p>
-							</div>
-						</div>
-
-						<div class="flex items-start gap-3">
-							<div class="mt-1">
-								<div class="p-1.5 bg-gray-100 rounded">
-									<Calendar class="h-4 w-4 text-gray-600" />
-								</div>
-							</div>
-							<div class="flex-1">
-								<p class="text-sm font-medium text-gray-900">Membre depuis</p>
-								<p class="text-sm text-gray-600">{formatDate(user?.created_at)}</p>
-							</div>
-						</div>
-
-						<div class="flex items-start gap-3">
-							<div class="mt-1">
-								<div class="p-1.5 bg-gray-100 rounded">
-									<Calendar class="h-4 w-4 text-gray-600" />
-								</div>
-							</div>
-							<div class="flex-1">
-								<p class="text-sm font-medium text-gray-900">Dernière mise à jour</p>
-								<p class="text-sm text-gray-600">{formatDate(user?.updated_at)}</p>
-							</div>
-						</div>
-					</div>
-				</div>
-
-				<!-- Quick Stats Card -->
-				<div class="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl shadow-sm p-6 text-white">
-					<h3 class="text-lg font-semibold mb-3">Statistiques rapides</h3>
-					<div class="space-y-3">
-						<div>
-							<p class="text-sm opacity-90">Statut du compte</p>
-							<p class="text-xl font-bold">Actif</p>
-						</div>
-						<div>
-							<p class="text-sm opacity-90">Type de compte</p>
-							<p class="text-xl font-bold">Professionnel</p>
-						</div>
-					</div>
-				</div>
-			</div>
 		</div>
 	</div>
 </div>

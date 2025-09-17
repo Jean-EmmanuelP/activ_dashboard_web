@@ -84,7 +84,7 @@
 			<!-- Logo/Header Section -->
 			<div class="p-6 border-b border-gray-200">
 				<h2 class="font-black text-2xl text-blue-900">
-					Dashboard Médecin
+					Actio
 				</h2>
 				<div class="mt-4 p-3 rounded-lg bg-gray-50">
 					<p class="font-bold text-sm text-gray-900">
