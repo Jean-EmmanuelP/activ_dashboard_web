@@ -10,6 +10,10 @@
 	let loading = $state(false);
 	let error = $state('');
 	let loadingSubmissions = $state(true);
+	let searchSuggestions = $state<Submission[]>([]);
+	let showSuggestions = $state(false);
+	let allSubmissions = $state<Submission[]>([]);
+	let searchTimeout: number;
 	
 	onMount(async () => {
 		await loadRecentSubmissions();
@@ -21,93 +25,73 @@
 			const { data, error: err } = await supabase
 				.from('submissions')
 				.select('*')
-				.order('created_at', { ascending: false })
-				.limit(10);
+				.order('created_at', { ascending: false });
 			
 			if (!err && data) {
-				submissionsList = data;
+				allSubmissions = data;
+				submissionsList = data.slice(0, 10); // Affiche les 10 plus récentes par défaut
 			}
 		} finally {
 			loadingSubmissions = false;
 		}
 	}
 
-	async function searchSubmission() {
-		if (!searchKey.trim()) {
-			error = 'Veuillez entrer au moins 2 caractères';
-			return;
-		}
-
-		const searchValue = searchKey.trim().toLowerCase();
+	function searchSubmissionsLive() {
+		clearTimeout(searchTimeout);
 		
-		if (searchValue.length < 2) {
-			error = 'Veuillez entrer au moins 2 caractères (début ou fin de la clé)';
+		if (!searchKey.trim() || searchKey.trim().length < 2) {
+			showSuggestions = false;
+			searchSuggestions = [];
 			return;
 		}
 
-		loading = true;
-		error = '';
-
-		try {
-			const { data: allSubmissions, error: subError } = await supabase
-				.from('submissions')
-				.select('*')
-				.or(`secure_key.ilike.${searchValue}%,secure_key.ilike.%${searchValue}`);
-
-			if (subError) throw subError;
-
-			let matchedSubmissions = allSubmissions || [];
+		searchTimeout = setTimeout(() => {
+			const searchValue = searchKey.trim().toLowerCase();
 			
+			// Filtrage côté client pour les UUIDs
+			let matchedSubmissions = allSubmissions.filter(submission => {
+				const key = submission.secure_key?.toLowerCase() || '';
+				return key.startsWith(searchValue) || key.includes(searchValue);
+			});
+			
+			// Tri par pertinence : exact match > commence par > contient
 			matchedSubmissions.sort((a, b) => {
-				const aKey = a.secure_key.toLowerCase();
-				const bKey = b.secure_key.toLowerCase();
+				const aKey = a.secure_key?.toLowerCase() || '';
+				const bKey = b.secure_key?.toLowerCase() || '';
 				
-				if (aKey === searchValue) return -1;
-				if (bKey === searchValue) return 1;
+				// Correspondance exacte en premier
+				if (aKey === searchValue && bKey !== searchValue) return -1;
+				if (bKey === searchValue && aKey !== searchValue) return 1;
 				
-				if (aKey.startsWith(searchValue) && !bKey.startsWith(searchValue)) return -1;
-				if (!aKey.startsWith(searchValue) && bKey.startsWith(searchValue)) return 1;
+				// Ensuite ceux qui commencent par la valeur recherchée
+				const aStarts = aKey.startsWith(searchValue);
+				const bStarts = bKey.startsWith(searchValue);
+				if (aStarts && !bStarts) return -1;
+				if (bStarts && !aStarts) return 1;
 				
-				return 0;
+				// Enfin par date de création (plus récent en premier)
+				return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
 			});
 
-			if (matchedSubmissions.length === 0) {
-				throw new Error(`Aucune submission trouvée avec "${searchValue}" au début ou à la fin de la clé`);
-			}
-
-			const submission = matchedSubmissions[0];
-
-			const { data: answersData } = await supabase
-				.from('answers')
-				.select('*')
-				.eq('submission_id', submission.id)
-				.order('question_id');
-
-			selectedSubmission = submission;
-			
-			if (!submissionsList.find(s => s.id === submission.id)) {
-				submissionsList = [submission, ...submissionsList];
-			}
-
-			searchKey = '';
-			
-			if (matchedSubmissions.length > 1) {
-				const matchInfo = matchedSubmissions.slice(0, 3).map(s => {
-					const key = s.secure_key;
-					return `${key.slice(0, 4)}...${key.slice(-4)}`;
-				}).join(', ');
-				
-				error = `${matchedSubmissions.length} correspondances trouvées (${matchInfo}${matchedSubmissions.length > 3 ? ', ...' : ''}). Affichage de la meilleure correspondance.`;
-			} else {
-				const key = submission.secure_key;
-				error = `✓ Submission trouvée: ${key.slice(0, 8)}...${key.slice(-8)}`;
-			}
-		} catch (err) {
-			error = err instanceof Error ? err.message : 'Erreur lors de la recherche';
-		} finally {
-			loading = false;
-		}
+			searchSuggestions = matchedSubmissions.slice(0, 5); // Limite à 5 suggestions
+			showSuggestions = searchSuggestions.length > 0;
+		}, 300); // Délai de 300ms pour éviter trop de requêtes
 	}
+
+	function selectSuggestion(submission: Submission) {
+		searchKey = '';
+		showSuggestions = false;
+		searchSuggestions = [];
+		selectSubmission(submission);
+	}
+
+	function hideSuggestions() {
+		// Délai pour permettre le clic sur une suggestion
+		setTimeout(() => {
+			showSuggestions = false;
+		}, 200);
+	}
+
 
 	async function selectSubmission(submission: Submission) {
 		goto(`/dashboard/submission/${submission.id}`);
@@ -130,30 +114,72 @@
 	<div class="card mb-8">
 		<div class="mb-4">
 			<p class="lato-regular text-sm" style="color: var(--color-gray-600);">
-				💡 Demandez au patient les 2-5 premiers ou derniers caractères de sa clé sécurisée
+				💡 Tapez les premiers caractères de la clé sécurisée du patient (ex: 7d2 pour 7d27eb11...)
 			</p>
 		</div>
-		<form onsubmit={(e) => { e.preventDefault(); searchSubmission(); }} class="flex gap-4">
-			<div class="flex-1 gap-2">
-				<div class="relative flex flex-row gap-4">
-					<input
-						placeholder="Ex: c5df (début) ou 0154 (fin) - Min. 2 caractères"
-						bind:value={searchKey}
-						disabled={loading}
-						class="form-input pl-12"
-						style="width: 100%;"
-					/>
+		
+		<!-- Nouvelle barre de recherche avec suggestions -->
+		<div class="relative">
+			<div class="relative">
+				<input
+					placeholder="Rechercher une submission... (ex: 7d2, c5df)"
+					bind:value={searchKey}
+					oninput={searchSubmissionsLive}
+					onfocus={() => { if (searchSuggestions.length > 0) showSuggestions = true; }}
+					onblur={hideSuggestions}
+					class="search-input"
+					autocomplete="off"
+				/>
+				<div class="search-icon">
+					<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<circle cx="11" cy="11" r="8"></circle>
+						<path d="m21 21-4.35-4.35"></path>
+					</svg>
 				</div>
 			</div>
-			<button type="submit" disabled={loading || !searchKey.trim()} class="btn btn-primary">
-				{#if loading}
-					<div class="spinner" style="width: 20px; height: 20px;"></div>
-					Recherche...
-				{:else}
-					Rechercher
-				{/if}
-			</button>
-		</form>
+			
+			<!-- Suggestions dropdown -->
+			{#if showSuggestions && searchSuggestions.length > 0}
+				<div class="suggestions-dropdown">
+					{#each searchSuggestions as suggestion}
+						<button 
+							class="suggestion-item"
+							onclick={() => selectSuggestion(suggestion)}
+						>
+							<div class="suggestion-content">
+								<div class="suggestion-key">
+									{suggestion.secure_key}
+								</div>
+								<div class="suggestion-meta">
+									<span class="suggestion-status badge {getStatusColor(suggestion.status)}">
+										{suggestion.status}
+									</span>
+									<span class="suggestion-date">
+										{new Date(suggestion.created_at).toLocaleDateString('fr-FR')}
+									</span>
+									{#if suggestion.patient_info?.firstName || suggestion.patient_info?.lastName}
+										<span class="suggestion-patient">
+											{suggestion.patient_info.firstName} {suggestion.patient_info.lastName}
+										</span>
+									{/if}
+								</div>
+							</div>
+							<div class="suggestion-arrow">
+								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+									<polyline points="9,18 15,12 9,6"></polyline>
+								</svg>
+							</div>
+						</button>
+					{/each}
+					
+					{#if searchKey.trim().length >= 2 && searchSuggestions.length === 0}
+						<div class="suggestion-empty">
+							Aucune submission trouvée avec "{searchKey}"
+						</div>
+					{/if}
+				</div>
+			{/if}
+		</div>
 
 		{#if error}
 			<div class="alert {error.startsWith('✓') ? 'alert-success' : error.includes('correspondances trouvées') ? 'alert-warning' : 'alert-error'} mt-4">
@@ -238,3 +264,178 @@
 		</div>
 	</div>
 </div>
+
+<style>
+	/* Barre de recherche moderne */
+	.search-input {
+		width: 100%;
+		padding: 1rem 1rem 1rem 3rem;
+		border: 2px solid #e5e7eb;
+		border-radius: 12px;
+		font-size: 1rem;
+		font-family: 'Lato', sans-serif;
+		font-weight: 400;
+		color: #374151;
+		background-color: #ffffff;
+		transition: all 0.2s ease;
+		outline: none;
+		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+	}
+
+	.search-input:focus {
+		border-color: #3b82f6;
+		box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1), 0 4px 6px rgba(0, 0, 0, 0.05);
+	}
+
+	.search-input::placeholder {
+		color: #9ca3af;
+		font-style: italic;
+	}
+
+	.search-icon {
+		position: absolute;
+		left: 1rem;
+		top: 50%;
+		transform: translateY(-50%);
+		color: #6b7280;
+		pointer-events: none;
+		z-index: 1;
+	}
+
+	/* Dropdown des suggestions */
+	.suggestions-dropdown {
+		position: absolute;
+		top: 100%;
+		left: 0;
+		right: 0;
+		background: white;
+		border: 1px solid #e5e7eb;
+		border-radius: 12px;
+		box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1), 0 4px 6px rgba(0, 0, 0, 0.05);
+		z-index: 50;
+		margin-top: 0.5rem;
+		max-height: 400px;
+		overflow-y: auto;
+		animation: slideDown 0.2s ease-out;
+	}
+
+	@keyframes slideDown {
+		from {
+			opacity: 0;
+			transform: translateY(-10px);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
+	}
+
+	.suggestion-item {
+		width: 100%;
+		padding: 1rem;
+		border: none;
+		background: none;
+		text-align: left;
+		cursor: pointer;
+		transition: background-color 0.15s ease;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		border-bottom: 1px solid #f3f4f6;
+	}
+
+	.suggestion-item:last-child {
+		border-bottom: none;
+		border-radius: 0 0 12px 12px;
+	}
+
+	.suggestion-item:first-child {
+		border-radius: 12px 12px 0 0;
+	}
+
+	.suggestion-item:hover {
+		background-color: #f8fafc;
+	}
+
+	.suggestion-item:active {
+		background-color: #e2e8f0;
+	}
+
+	.suggestion-content {
+		flex: 1;
+	}
+
+	.suggestion-key {
+		font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+		font-size: 0.875rem;
+		font-weight: 600;
+		color: #374151;
+		margin-bottom: 0.25rem;
+	}
+
+	.suggestion-meta {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		font-size: 0.75rem;
+	}
+
+	.suggestion-status {
+		font-size: 0.65rem;
+		padding: 0.25rem 0.5rem;
+		border-radius: 4px;
+		font-weight: 600;
+		text-transform: uppercase;
+	}
+
+	.suggestion-date {
+		color: #6b7280;
+		font-weight: 400;
+	}
+
+	.suggestion-patient {
+		color: #374151;
+		font-weight: 500;
+		font-style: italic;
+	}
+
+	.suggestion-arrow {
+		color: #9ca3af;
+		margin-left: 1rem;
+		transition: color 0.15s ease;
+	}
+
+	.suggestion-item:hover .suggestion-arrow {
+		color: #6b7280;
+	}
+
+	.suggestion-empty {
+		padding: 1.5rem;
+		text-align: center;
+		color: #6b7280;
+		font-style: italic;
+		background-color: #f9fafb;
+		border-radius: 12px;
+	}
+
+	/* Responsive design */
+	@media (max-width: 768px) {
+		.search-input {
+			padding: 0.875rem 0.875rem 0.875rem 2.75rem;
+			font-size: 0.925rem;
+		}
+
+		.search-icon {
+			left: 0.875rem;
+		}
+
+		.suggestion-item {
+			padding: 0.875rem;
+		}
+
+		.suggestion-meta {
+			flex-wrap: wrap;
+			gap: 0.5rem;
+		}
+	}
+</style>

@@ -5,11 +5,13 @@ export const supabase = createClient(PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_K
 
 export type User = {
 	id: number;
+	auth_user_id?: string;
 	email: string;
 	role: string;
 	first_name?: string;
 	last_name?: string;
 	signature?: string;
+	signatures?: string;
 	created_at?: string;
 	updated_at?: string;
 };

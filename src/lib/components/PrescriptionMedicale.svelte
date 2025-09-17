@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import TinyMCEEditor from './TinyMCEEditor.svelte';
-
+	import { supabase } from '$lib/supabase';
 	import type { AIRecommendationResponse } from '$lib/types/ai';
 	
 	let {
@@ -15,9 +15,8 @@
 	let editorRef: TinyMCEEditor;
 	let content = $state('');
 
-	// Extraction des vraies données
-	let doctorInfo = $derived({
-		name: submission?.submitted_by_user_id ? 'Dr. [Nom du médecin]' : 'Dr. [Nom non défini]',
+	let doctorInfo = $state({
+		name: 'Dr. [Nom du médecin]',
 		specialty: 'Médecin prescripteur',
 		rpps: '[RPPS]',
 		address: '[Adresse du cabinet]',
@@ -25,9 +24,9 @@
 		email: '[Email]'
 	});
 
-	let patientInfo = $derived({
-		name: submission?.patient_info?.nom ? `${submission.patient_info.prenom || ''} ${submission.patient_info.nom}`.trim() : '[Nom du patient]',
-		birthDate: submission?.patient_info?.date_naissance || '[Date de naissance]'
+	let patientInfo = $state({
+		name: '[Nom du patient]',
+		birthDate: '[Date de naissance]'
 	});
 
 	let documentDate = new Date().toLocaleDateString('fr-FR');
@@ -42,112 +41,123 @@
 			`;
 		}
 
+		const date = new Date().toLocaleDateString('fr-FR');
+
 		return `
+			<!-- En-tête -->
+			<div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px;">
+				<div style="border: 2px solid #000; padding: 15px; width: 45%; font-size: 11px; line-height: 1.4;">
+					<strong>${doctorInfo.name}</strong><br/>
+					Spécialité : ${doctorInfo.specialty}<br/>
+					RPPS : ${doctorInfo.rpps}<br/>
+					Adresse : ${doctorInfo.address}<br/>
+					Téléphone : ${doctorInfo.phone}<br/>
+					Mail : ${doctorInfo.email}
+				</div>
+				<div style="border: 2px solid #000; padding: 15px; width: 45%; font-size: 11px; line-height: 1.4;">
+					<strong>${patientInfo.name}</strong><br/><br/>
+					Date de naissance ${patientInfo.birthDate}
+				</div>
+			</div>
+			<div style="text-align: right; margin-bottom: 20px; font-size: 12px;">
+				Le ${date}
+			</div>
+			
+			<!-- Titre centré -->
 			<div style="text-align: center; margin-bottom: 1.5rem;">
 				<h1 style="font-size: 16px; font-weight: 700;">PRESCRIPTION D'ACTIVITÉ PHYSIQUE ADAPTÉE</h1>
 			</div>
 
-			<div style="margin-bottom: 1rem; font-size: 12px;">
-				<p><strong>Patient :</strong> ${patientInfo.name}</p>
-				<p><strong>Date de naissance :</strong> ${patientInfo.birthDate}</p>
-				<p><strong>Date :</strong> ${documentDate}</p>
-			</div>
+			<!-- Alertes block si présent -->
+			${aiResponse.alertes_block ? `
+				<div style="border: 2px solid #ff6b6b; background-color: #ffe0e0; padding: 1rem; margin-bottom: 1.5rem; border-radius: 8px;">
+					<div style="font-size: 12px; line-height: 1.4; color: #d63031;">
+						${aiResponse.alertes_block.replace(/\n/g, '<br/>')}
+					</div>
+				</div>
+			` : ''}
 
-			<p style="margin: 1rem 0; font-size: 12px;">Je prescris une activité physique et/ou sportive adaptée.<br/>
-			Pendant <strong>6 mois</strong>, à adapter en fonction de l'évolution des aptitudes du patient.</p>
+			<!-- Page 1 - Prescription complète -->
+			${aiResponse.ordonnance ? `
+				<div style="font-size: 11px; line-height: 1.4; white-space: pre-line;">
+					${aiResponse.ordonnance.replace(/\n/g, '<br/>')}
+				</div>
+			` : `
+				<!-- Fallback: construction manuelle si ordonnance n'est pas disponible -->
+				<p style="margin: 1rem 0; font-size: 12px;">Je prescris une activité physique et/ou sportive adaptée.<br/>
+				Pendant <strong>6 mois</strong>, à adapter en fonction de l'évolution des aptitudes du patient.</p>
 
-			<!-- Programme personnalisé basé sur l'IA -->
-			${aiResponse.programme_perso ? `
-				<div style="margin-bottom: 1rem;">
-					<p style="font-weight: 700; text-decoration: underline; margin-bottom: 0.5rem; font-size: 12px;">Endurance</p>
-					<div style="font-size: 11px; line-height: 1.4; padding-left: 1rem;">
-						${aiResponse.programme_perso.endurance.replace(/\n/g, '<br/>')}
-					</div>
-				</div>
-				
-				<div style="margin-bottom: 1rem;">
-					<p style="font-weight: 700; text-decoration: underline; margin-bottom: 0.5rem; font-size: 12px;">Renforcement musculaire</p>
-					<div style="font-size: 11px; line-height: 1.4; padding-left: 1rem;">
-						${aiResponse.programme_perso.renforcement.replace(/\n/g, '<br/>')}
-					</div>
-				</div>
-				
-				<div style="margin-bottom: 1rem;">
-					<p style="font-weight: 700; text-decoration: underline; margin-bottom: 0.5rem; font-size: 12px;">Étirements</p>
-					<div style="font-size: 11px; line-height: 1.4; padding-left: 1rem;">
-						${aiResponse.programme_perso.etirements.replace(/\n/g, '<br/>')}
-					</div>
-				</div>
-				
-				${aiResponse.programme_perso.equilibre ? `
+				<!-- Programme personnalisé basé sur l'IA -->
+				${aiResponse.programme_perso ? `
 					<div style="margin-bottom: 1rem;">
-						<p style="font-weight: 700; text-decoration: underline; margin-bottom: 0.5rem; font-size: 12px;">Équilibre</p>
+						<p style="font-weight: 700; text-decoration: underline; margin-bottom: 0.5rem; font-size: 12px;">Endurance</p>
 						<div style="font-size: 11px; line-height: 1.4; padding-left: 1rem;">
-							${aiResponse.programme_perso.equilibre.replace(/\n/g, '<br/>')}
+							${aiResponse.programme_perso.endurance.replace(/\n/g, '<br/>')}
 						</div>
 					</div>
-				` : ''}
-			` : ''}
-
-			<!-- Planification personnalisée -->
-			${aiResponse.planification ? `
-				<div style="margin-bottom: 1rem;">
-					<p style="font-weight: 700; text-decoration: underline; margin-bottom: 0.5rem; font-size: 12px;">Planification</p>
-					<div style="font-size: 11px; line-height: 1.4; padding-left: 1rem;">
-						${aiResponse.planification.replace(/\n/g, '<br/>')}
+					
+					<div style="margin-bottom: 1rem;">
+						<p style="font-weight: 700; text-decoration: underline; margin-bottom: 0.5rem; font-size: 12px;">Renforcement musculaire</p>
+						<div style="font-size: 11px; line-height: 1.4; padding-left: 1rem;">
+							${aiResponse.programme_perso.renforcement.replace(/\n/g, '<br/>')}
+						</div>
 					</div>
-				</div>
-			` : ''}
+					
+					<div style="margin-bottom: 1rem;">
+						<p style="font-weight: 700; text-decoration: underline; margin-bottom: 0.5rem; font-size: 12px;">Étirements</p>
+						<div style="font-size: 11px; line-height: 1.4; padding-left: 1rem;">
+							${aiResponse.programme_perso.etirements.replace(/\n/g, '<br/>')}
+						</div>
+					</div>
+					
+					${aiResponse.programme_perso.equilibre && aiResponse.programme_perso.equilibre !== '—' ? `
+						<div style="margin-bottom: 1rem;">
+							<p style="font-weight: 700; text-decoration: underline; margin-bottom: 0.5rem; font-size: 12px;">Équilibre / coordination / proprioception</p>
+							<div style="font-size: 11px; line-height: 1.4; padding-left: 1rem;">
+								${aiResponse.programme_perso.equilibre.replace(/\n/g, '<br/>')}
+							</div>
+						</div>
+					` : ''}
+				` : ''}
 
-			<!-- Conseils personnalisés -->
-			${aiResponse.conseils && aiResponse.conseils.length > 0 ? `
-				<div style="margin-bottom: 1.5rem;">
-					<p style="font-weight: 700; text-decoration: underline; margin-bottom: 0.5rem; font-size: 12px;">Conseils pratiques</p>
-					<ul style="font-size: 11px; line-height: 1.4;">
-						${aiResponse.conseils.map(conseil => `<li>${conseil}</li>`).join('')}
-					</ul>
+				<div style="margin-top: 2rem; font-size: 10px;">
+					<p><strong>Médecin prescripteur :</strong> ${doctorInfo.name}</p>
+					<p><strong>Spécialité :</strong> ${doctorInfo.specialty}</p>
+					<p><strong>Date de prescription :</strong> ${documentDate}</p>
 				</div>
-			` : ''}
-
-			<!-- Bénéfices attendus -->
-			${aiResponse.benefices && aiResponse.benefices.length > 0 ? `
-				<div style="margin-bottom: 1.5rem;">
-					<p style="font-weight: 700; text-decoration: underline; margin-bottom: 0.5rem; font-size: 12px;">Bénéfices attendus</p>
-					<ul style="font-size: 11px; line-height: 1.4;">
-						${aiResponse.benefices.map(benefice => `<li>${benefice}</li>`).join('')}
-					</ul>
-				</div>
-			` : ''}
-
-			<!-- Orientations -->
-			${aiResponse.orientation && aiResponse.orientation.length > 0 ? `
-				<div style="margin-bottom: 1.5rem;">
-					<p style="font-weight: 700; text-decoration: underline; margin-bottom: 0.5rem; font-size: 12px;">Orientations recommandées</p>
-					<ul style="font-size: 11px; line-height: 1.4;">
-						${aiResponse.orientation.map(orient => `<li>${orient}</li>`).join('')}
-					</ul>
-				</div>
-			` : ''}
-
-			<!-- Contre-indications -->
-			${aiResponse.contraindications && aiResponse.contraindications.length > 0 ? `
-				<div style="margin-bottom: 1.5rem;">
-					<p style="font-weight: 700; text-decoration: underline; margin-bottom: 0.5rem; font-size: 12px;">Contre-indications et précautions</p>
-					<ul style="font-size: 11px; line-height: 1.4;">
-						${aiResponse.contraindications.map(contra => `<li>${contra}</li>`).join('')}
-					</ul>
-				</div>
-			` : ''}
-
-			<div style="margin-top: 2rem; font-size: 10px;">
-				<p><strong>Médecin prescripteur :</strong> ${doctorInfo.name}</p>
-				<p><strong>Spécialité :</strong> ${doctorInfo.specialty}</p>
-				<p><strong>Date de prescription :</strong> ${documentDate}</p>
-			</div>
+			`}
 		`;
 	}
 
-	onMount(() => {
+	onMount(async () => {
+		// Récupérer les infos du médecin connecté
+		const authUser = (await supabase.auth.getUser()).data.user;
+		if (authUser) {
+			const { data } = await supabase
+				.from('users')
+				.select('*')
+				.eq('auth_user_id', authUser.id)
+				.single();
+			if (data) {
+				doctorInfo.name = `Dr. ${data.first_name} ${data.last_name}`;
+				if (data.rpps) doctorInfo.rpps = data.rpps;
+				if (data.address) doctorInfo.address = data.address;
+				if (data.phone) doctorInfo.phone = data.phone;
+				if (data.email) doctorInfo.email = data.email;
+			}
+		}
+		
+		// Récupérer les infos du patient
+		if (submission?.patient_info) {
+			const p = submission.patient_info;
+			if (p.firstName || p.lastName) {
+				patientInfo.name = `${p.gender === 'male' ? 'M' : 'Mme'} ${p.lastName || ''}, ${p.firstName || ''}`;
+			}
+			if (p.birthDate) {
+				patientInfo.birthDate = new Date(p.birthDate).toLocaleDateString('fr-FR');
+			}
+		}
+		
 		content = generatePrescriptionContent();
 	});
 

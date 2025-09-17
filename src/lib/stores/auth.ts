@@ -28,6 +28,9 @@ function createAuthStore() {
 					}
 				});
 
+				console.log('🔍 SignUp authData:', authData);
+				console.log('🔍 SignUp authError:', authError);
+
 				if (authError) {
 					// Si l'erreur dit que l'utilisateur existe déjà dans auth, proposer la connexion
 					if (authError.message.includes('already registered') || authError.message.includes('already exists')) {
@@ -37,29 +40,68 @@ function createAuthStore() {
 				}
 
 				if (authData.user) {
+					console.log('🔍 authData.user:', authData.user);
+					console.log('🔍 authData.user.id:', authData.user.id);
 					// Tenter de créer l'utilisateur dans notre table
+					const insertData = {
+						auth_user_id: authData.user.id,
+						email,
+						first_name: firstName,
+						last_name: lastName,
+						role: 'doctor'
+					};
+					console.log('🔍 Data to insert in users table:', insertData);
+
 					const { data: userData, error: userError } = await supabase
 						.from('users')
-						.insert({
-							email,
-							first_name: firstName,
-							last_name: lastName,
-							role: 'doctor'
-						})
+						.insert(insertData)
 						.select()
 						.single();
 
+					console.log('🔍 Insert result userData:', userData);
+					console.log('🔍 Insert result userError:', userError);
+
 					if (userError) {
-						// Si l'utilisateur existe déjà dans notre table, le récupérer
+						// Si l'utilisateur existe déjà dans notre table, le récupérer et mettre à jour l'auth_user_id
 						if (userError.code === '23505') {
+							console.log('🔍 User already exists in DB, fetching and updating with auth_user_id...');
+							
+							// D'abord récupérer l'utilisateur existant
 							const { data: existingUser, error: fetchError } = await supabase
 								.from('users')
 								.select('*')
 								.eq('email', email)
 								.single();
 							
+							console.log('🔍 Existing user found:', existingUser);
+							console.log('🔍 Fetch error:', fetchError);
+							
 							if (fetchError) throw fetchError;
 							if (!existingUser) throw new Error('Erreur lors de la récupération du compte existant');
+							
+							// Mettre à jour avec l'auth_user_id si pas déjà défini
+							if (!existingUser.auth_user_id) {
+								console.log('🔍 Updating existing user with auth_user_id...');
+								const { data: updatedUser, error: updateError } = await supabase
+									.from('users')
+									.update({ 
+										auth_user_id: authData.user.id,
+										first_name: firstName || existingUser.first_name,
+										last_name: lastName || existingUser.last_name
+									})
+									.eq('id', existingUser.id)
+									.select()
+									.single();
+								
+								console.log('🔍 Updated user:', updatedUser);
+								console.log('🔍 Update error:', updateError);
+								
+								if (updateError) throw updateError;
+								if (!updatedUser) throw new Error('Erreur lors de la mise à jour du compte');
+								
+								set({ user: updatedUser, loading: false, error: null });
+								return updatedUser;
+							}
 							
 							set({ user: existingUser, loading: false, error: null });
 							return existingUser;
@@ -68,6 +110,7 @@ function createAuthStore() {
 						}
 					}
 					
+					console.log('🔍 Successfully created user in DB:', userData);
 					set({ user: userData, loading: false, error: null });
 					return userData;
 				}
@@ -87,14 +130,22 @@ function createAuthStore() {
 					password
 				});
 
+				console.log('🔍 SignIn authData:', authData);
+				console.log('🔍 SignIn authError:', authError);
+
 				if (authError) throw authError;
 
 				if (authData.user) {
+					console.log('🔍 SignIn authData.user.id:', authData.user.id);
+					
 					const { data: userData, error: userError } = await supabase
 						.from('users')
 						.select('*')
-						.eq('email', email)
+						.eq('auth_user_id', authData.user.id)
 						.single();
+
+					console.log('🔍 SignIn userData found:', userData);
+					console.log('🔍 SignIn userError:', userError);
 
 					if (userError) throw userError;
 					
@@ -129,12 +180,19 @@ function createAuthStore() {
 			try {
 				const { data: { user: authUser } } = await supabase.auth.getUser();
 				
+				console.log('🔍 CheckUser authUser:', authUser);
+				
 				if (authUser) {
+					console.log('🔍 CheckUser authUser.id:', authUser.id);
+					
 					const { data: userData, error: userError } = await supabase
 						.from('users')
 						.select('*')
-						.eq('email', authUser.email)
+						.eq('auth_user_id', authUser.id)
 						.single();
+
+					console.log('🔍 CheckUser userData found:', userData);
+					console.log('🔍 CheckUser userError:', userError);
 
 					if (userError) throw userError;
 					

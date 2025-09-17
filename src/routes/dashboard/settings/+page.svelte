@@ -3,7 +3,8 @@
 	import { auth } from '$lib/stores/auth';
 	import { Button, Alert } from 'flowbite-svelte';
 	import { onMount } from 'svelte';
-	import { UserCircle, Mail, FileSignature, Calendar, Shield, Check } from 'lucide-svelte';
+	import { UserCircle, Mail, FileSignature, Calendar, Shield, Check, Upload, Trash2 } from 'lucide-svelte';
+	import { uploadSignature, getSignedSignatureUrl, deleteSignature } from '$lib/signature';
 
 	let user = $state<any>(null);
 	let firstName = $state('');
@@ -13,15 +14,29 @@
 	let loading = $state(false);
 	let success = $state('');
 	let error = $state('');
+	
+	// Signature image variables
+	let signatureFile = $state<File | null>(null);
+	let signaturePreview = $state<string | null>(null);
+	let signatureLoading = $state(false);
+	let signatureError = $state('');
+	let signatureSuccess = $state('');
 
 	onMount(async () => {
-		const unsubscribe = auth.subscribe((state) => {
+		const unsubscribe = auth.subscribe(async (state) => {
 			if (state.user) {
 				user = state.user;
 				firstName = state.user.first_name || '';
 				lastName = state.user.last_name || '';
 				email = state.user.email;
 				signature = state.user.signature || '';
+				
+				// Load signature image preview
+				try {
+					signaturePreview = await getSignedSignatureUrl();
+				} catch (err) {
+					console.log('No signature image found');
+				}
 			}
 		});
 
@@ -67,6 +82,63 @@
 			month: 'long',
 			year: 'numeric'
 		});
+	}
+
+	async function handleSignatureUpload() {
+		if (!signatureFile) {
+			signatureError = 'Sélectionnez un fichier.';
+			return;
+		}
+
+		signatureLoading = true;
+		signatureError = '';
+		signatureSuccess = '';
+
+		try {
+			await uploadSignature(signatureFile);
+			signaturePreview = await getSignedSignatureUrl();
+			signatureSuccess = 'Signature mise à jour avec succès';
+			setTimeout(() => signatureSuccess = '', 3000);
+		} catch (err: any) {
+			signatureError = err?.message ?? 'Erreur lors de l\'upload';
+		} finally {
+			signatureLoading = false;
+		}
+	}
+
+	async function handleSignatureDelete() {
+		signatureLoading = true;
+		signatureError = '';
+		signatureSuccess = '';
+
+		try {
+			await deleteSignature();
+			signaturePreview = null;
+			signatureSuccess = 'Signature supprimée avec succès';
+			setTimeout(() => signatureSuccess = '', 3000);
+		} catch (err: any) {
+			signatureError = err?.message ?? 'Erreur lors de la suppression';
+		} finally {
+			signatureLoading = false;
+		}
+	}
+
+	function handleFileChange(event: Event) {
+		const target = event.target as HTMLInputElement;
+		const file = target.files?.[0];
+		if (file) {
+			// Validate file type and size
+			if (!file.type.startsWith('image/')) {
+				signatureError = 'Type de fichier invalide. Veuillez sélectionner une image.';
+				return;
+			}
+			if (file.size > 1_000_000) {
+				signatureError = 'Fichier trop volumineux. Taille maximum : 1 Mo.';
+				return;
+			}
+			signatureFile = file;
+			signatureError = '';
+		}
 	}
 </script>
 
@@ -164,7 +236,7 @@
 							<label for="signature" class="block text-sm font-medium text-gray-700">
 								<div class="flex items-center gap-2">
 									<FileSignature class="h-4 w-4" />
-									Signature électronique
+									Signature électronique (texte)
 								</div>
 							</label>
 							<textarea
@@ -176,6 +248,107 @@
 								placeholder="Votre signature sera ajoutée automatiquement aux documents générés"
 							/>
 							<p class="text-xs text-gray-500 mt-1">Cette signature apparaîtra sur les prescriptions et recommandations</p>
+						</div>
+
+						<!-- Signature Image Section -->
+						<div class="space-y-4 border-t border-gray-200 pt-6">
+							<div class="flex items-center gap-2">
+								<FileSignature class="h-5 w-5 text-gray-700" />
+								<h3 class="text-lg font-medium text-gray-900">Signature numérisée</h3>
+							</div>
+							
+							{#if signatureSuccess}
+								<div class="animate-fade-in">
+									<Alert color="green" class="border-l-4 border-green-500">
+										<div class="flex items-center gap-2">
+											<Check class="h-5 w-5" />
+											<span>{signatureSuccess}</span>
+										</div>
+									</Alert>
+								</div>
+							{/if}
+
+							{#if signatureError}
+								<div class="animate-fade-in">
+									<Alert color="red" class="border-l-4 border-red-500">
+										{signatureError}
+									</Alert>
+								</div>
+							{/if}
+
+							<div class="space-y-4">
+								<div class="space-y-2">
+									<label for="signature-file" class="block text-sm font-medium text-gray-700">
+										Téléverser votre signature
+									</label>
+									<input
+										id="signature-file"
+										type="file"
+										accept="image/*"
+										onchange={handleFileChange}
+										disabled={signatureLoading}
+										class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 disabled:bg-gray-50 disabled:text-gray-500"
+									/>
+									<p class="text-xs text-gray-500">Formats acceptés : JPG, PNG, GIF. Taille maximum : 1 Mo</p>
+								</div>
+
+								<div class="flex gap-3">
+									<Button
+										onclick={handleSignatureUpload}
+										disabled={signatureLoading || !signatureFile}
+										class="bg-blue-600 hover:bg-blue-700 focus:ring-4 focus:ring-blue-200 transition-all duration-200"
+									>
+										{#if signatureLoading}
+											<span class="flex items-center gap-2">
+												<svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+													<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+													<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+												</svg>
+												Upload...
+											</span>
+										{:else}
+											<span class="flex items-center gap-2">
+												<Upload class="h-4 w-4" />
+												Upload / Remplacer
+											</span>
+										{/if}
+									</Button>
+
+									{#if signaturePreview}
+										<Button
+											onclick={handleSignatureDelete}
+											disabled={signatureLoading}
+											color="red"
+											class="bg-red-600 hover:bg-red-700 focus:ring-4 focus:ring-red-200 transition-all duration-200"
+										>
+											<span class="flex items-center gap-2">
+												<Trash2 class="h-4 w-4" />
+												Supprimer
+											</span>
+										</Button>
+									{/if}
+								</div>
+
+								<!-- Preview -->
+								<div class="space-y-2">
+									{#if signaturePreview}
+										<div class="border border-gray-200 rounded-lg p-4 bg-gray-50">
+											<p class="text-sm font-medium text-gray-700 mb-2">Aperçu de votre signature :</p>
+											<img 
+												src={signaturePreview} 
+												alt="Signature du médecin" 
+												class="max-w-xs max-h-32 object-contain border border-gray-300 rounded bg-white p-2"
+											/>
+											<p class="text-xs text-gray-500 mt-2">URL signée, expire dans 10 minutes</p>
+										</div>
+									{:else}
+										<div class="border border-gray-200 rounded-lg p-4 bg-gray-50 text-center">
+											<FileSignature class="h-12 w-12 text-gray-400 mx-auto mb-2" />
+											<p class="text-sm text-gray-600">Aucune signature pour le moment</p>
+										</div>
+									{/if}
+								</div>
+							</div>
 						</div>
 
 						<div class="pt-4">
